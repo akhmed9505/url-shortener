@@ -19,14 +19,15 @@ import (
 )
 
 type Handler struct {
+	ready     func(context.Context) error
 	analytics *analytics.Service
 	shortener *shortener.Service
 	baseURL   string
 	log       *slog.Logger
 }
 
-func NewHandler(service *shortener.Service, analyticsService *analytics.Service, baseURL string, log *slog.Logger) *Handler {
-	return &Handler{analytics: analyticsService, shortener: service, baseURL: baseURL, log: log}
+func NewHandler(service *shortener.Service, analyticsService *analytics.Service, ready func(context.Context) error, baseURL string, log *slog.Logger) *Handler {
+	return &Handler{ready: ready, analytics: analyticsService, shortener: service, baseURL: baseURL, log: log}
 }
 
 type ShortenRequest struct {

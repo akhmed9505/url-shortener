@@ -37,7 +37,7 @@ func TestPublicAPIRateLimits(t *testing.T) {
 	pool, redis, link := cacheFixture(t)
 	log := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	service := shortener.New(pgrepo.NewLinkRepository(pool), pgrepo.NewVisitRepository(pool), rediscache.NewLinkCache(redis, time.Hour), shortener.GenerateCode, 150*time.Millisecond, log)
-	handler := httpdelivery.NewHandler(service, analytics.New(pgrepo.NewAnalyticsRepository(pool)), "https://sho.rt", log)
+	handler := httpdelivery.NewHandler(service, analytics.New(pgrepo.NewAnalyticsRepository(pool)), pool.Ping, "https://sho.rt", log)
 	server := httptest.NewServer(httpdelivery.NewRouter(handler))
 	t.Cleanup(server.Close)
 	client := clientFromIP(t, net.IPv4(127, 0, 0, 1))

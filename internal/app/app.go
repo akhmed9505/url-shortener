@@ -54,7 +54,10 @@ func (a *App) Run(ctx context.Context) error {
 	visits := pgrepo.NewVisitRepository(pool)
 	service := shortener.New(repository, visits, cache, shortener.GenerateCode, a.cfg.AnalyticsWriteTimeout, a.log)
 	analyticsService := analytics.New(pgrepo.NewAnalyticsRepository(pool))
-	handler := httpdelivery.NewHandler(service, analyticsService, a.cfg.PublicBaseURL, a.log)
+	ready := func(ctx context.Context) error {
+		return postgres.CheckReadiness(ctx, pool)
+	}
+	handler := httpdelivery.NewHandler(service, analyticsService, ready, a.cfg.PublicBaseURL, a.log)
 	server := httpdelivery.NewServer(a.cfg.HTTP, httpdelivery.NewRouter(handler), a.log)
 	serverErrors := make(chan error, 1)
 	go func() {
@@ -69,15 +72,21 @@ func (a *App) Run(ctx context.Context) error {
 		a.log.Info("shutting down HTTP server")
 	}
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := server.Shutdown(shutdownCtx); err != nil {
-		closeErr := server.Close()
-		return fmt.Errorf("shut down HTTP server: %w", errors.Join(err, closeErr))
+	if err := shutdownHTTP(server, 10*time.Second); err != nil {
+		return fmt.Errorf("shut down HTTP server: %w", err)
 	}
 	if err := <-serverErrors; !errors.Is(err, http.ErrServerClosed) {
 		return fmt.Errorf("serve HTTP: %w", err)
 	}
 	a.log.Info("HTTP server stopped")
+	return nil
+}
+
+func shutdownHTTP(server *http.Server, timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	if err := server.Shutdown(ctx); err != nil {
+		return errors.Join(err, server.Close())
+	}
 	return nil
 }

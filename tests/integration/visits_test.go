@@ -24,7 +24,7 @@ import (
 func visitsServer(t *testing.T, pool *pgxpool.Pool) *httptest.Server {
 	t.Helper()
 	log := slog.New(slog.NewJSONHandler(io.Discard, nil))
-	handler := httpdelivery.NewHandler(nil, analytics.New(pgrepo.NewAnalyticsRepository(pool)), "https://sho.rt", log)
+	handler := httpdelivery.NewHandler(nil, analytics.New(pgrepo.NewAnalyticsRepository(pool)), pool.Ping, "https://sho.rt", log)
 	server := httptest.NewServer(httpdelivery.NewRouter(handler))
 	server.Client().Timeout = 5 * time.Second
 	t.Cleanup(server.Close)

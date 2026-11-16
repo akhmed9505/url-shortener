@@ -32,7 +32,7 @@ func (r *repositoryStub) Create(_ context.Context, code, raw string) (domain.Lin
 func testHandler(repository *repositoryStub) *Handler {
 	log := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	service := shortener.New(repository, &visitStub{}, missingCache{}, func() (string, error) { return "AbC123z9", nil }, 150*time.Millisecond, log)
-	return NewHandler(service, nil, "https://sho.rt", log)
+	return NewHandler(service, nil, nil, "https://sho.rt", log)
 }
 
 func TestShortenCreated(t *testing.T) {

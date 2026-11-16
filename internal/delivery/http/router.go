@@ -13,7 +13,7 @@ func NewRouter(handler *Handler) http.Handler {
 
 func newRouter(handler *Handler, limits *rateLimits) http.Handler {
 	router := chi.NewRouter()
-	router.Use(withRequestID)
+	router.Use(withRequestID, withAccessLog(handler.log))
 	router.With(limits.middleware(creationBucket)).Post("/shorten", handler.Shorten)
 	router.With(limits.middleware(analyticsBucket)).Get("/analytics/{code}", handler.Analytics)
 	router.With(limits.middleware(analyticsBucket)).Get("/analytics/{code}/visits", handler.Visits)
@@ -29,6 +29,7 @@ func newRouter(handler *Handler, limits *rateLimits) http.Handler {
 		}
 		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed", "")
 	})
+	router.Get("/health/ready", handler.Ready)
 	router.Get("/health/live", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")

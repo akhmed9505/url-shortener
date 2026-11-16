@@ -70,7 +70,7 @@ func TestAnalyticsAggregationsAndBoundaries(t *testing.T) {
 	}
 	checkSummaryTotals(t, summary)
 	log := slog.New(slog.NewJSONHandler(io.Discard, nil))
-	handler := httpdelivery.NewHandler(nil, analytics.New(pgrepo.NewAnalyticsRepository(pool)), "https://sho.rt", log)
+	handler := httpdelivery.NewHandler(nil, analytics.New(pgrepo.NewAnalyticsRepository(pool)), pool.Ping, "https://sho.rt", log)
 	server := httptest.NewServer(httpdelivery.NewRouter(handler))
 	defer server.Close()
 	response, err := server.Client().Get(server.URL + "/analytics/" + link.Code + "?from=2024-02-29&to=2024-03-02")
@@ -219,7 +219,7 @@ func TestAnalyticsDeadline(t *testing.T) {
 		t.Fatal(err)
 	}
 	log := slog.New(slog.NewJSONHandler(io.Discard, nil))
-	handler := httpdelivery.NewHandler(nil, analytics.New(pgrepo.NewAnalyticsRepository(pool)), "https://sho.rt", log)
+	handler := httpdelivery.NewHandler(nil, analytics.New(pgrepo.NewAnalyticsRepository(pool)), pool.Ping, "https://sho.rt", log)
 	server := httptest.NewServer(httpdelivery.NewRouter(handler))
 	defer server.Close()
 	start := time.Now()

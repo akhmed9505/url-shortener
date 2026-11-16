@@ -27,7 +27,7 @@ func newShortenServer(t *testing.T, pool *pgxpool.Pool, generate func() (string,
 	t.Helper()
 	log := slog.New(slog.NewJSONHandler(logs, nil))
 	service := shortener.New(pgrepo.NewLinkRepository(pool), pgrepo.NewVisitRepository(pool), missingCache{}, generate, 150*time.Millisecond, log)
-	handler := httpdelivery.NewHandler(service, nil, "https://sho.rt", log)
+	handler := httpdelivery.NewHandler(service, nil, pool.Ping, "https://sho.rt", log)
 	server := httptest.NewServer(httpdelivery.NewRouter(handler))
 	t.Cleanup(server.Close)
 	return server
