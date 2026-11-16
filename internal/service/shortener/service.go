@@ -21,18 +21,25 @@ type VisitRepository interface {
 	Record(ctx context.Context, visit domain.Visit) error
 }
 
+type LinkCache interface {
+	Get(ctx context.Context, code string) (domain.Link, bool, error)
+	Set(ctx context.Context, link domain.Link) error
+}
+
 type Service struct {
 	repository   LinkRepository
 	visits       VisitRepository
+	cache        LinkCache
 	generate     func() (string, error)
 	writeTimeout time.Duration
 	log          *slog.Logger
 }
 
-func New(repository LinkRepository, visits VisitRepository, generate func() (string, error), writeTimeout time.Duration, log *slog.Logger) *Service {
+func New(repository LinkRepository, visits VisitRepository, cache LinkCache, generate func() (string, error), writeTimeout time.Duration, log *slog.Logger) *Service {
 	return &Service{
 		repository:   repository,
 		visits:       visits,
+		cache:        cache,
 		generate:     generate,
 		writeTimeout: writeTimeout,
 		log:          log,

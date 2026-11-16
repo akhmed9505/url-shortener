@@ -141,5 +141,5 @@ func (f repositoryFunc) FindByCode(context.Context, string) (domain.Link, error)
 func newCreateService(repository LinkRepository, generate func() (string, error)) *Service {
 	visits := visitFunc(func(context.Context, domain.Visit) error { panic("unexpected Record during creation") })
 	log := slog.New(slog.NewJSONHandler(io.Discard, nil))
-	return New(repository, visits, generate, 150*time.Millisecond, log)
+	return New(repository, visits, missingCache{}, generate, 150*time.Millisecond, log)
 }

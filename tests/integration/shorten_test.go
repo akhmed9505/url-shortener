@@ -4,6 +4,7 @@ package integration
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	httpdelivery "github.com/akhmed9505/url-shortener/internal/delivery/http"
+	"github.com/akhmed9505/url-shortener/internal/domain"
 	pgrepo "github.com/akhmed9505/url-shortener/internal/repository/postgres"
 	"github.com/akhmed9505/url-shortener/internal/service/shortener"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -23,7 +25,7 @@ import (
 func newShortenServer(t *testing.T, pool *pgxpool.Pool, generate func() (string, error), logs io.Writer) *httptest.Server {
 	t.Helper()
 	log := slog.New(slog.NewJSONHandler(logs, nil))
-	service := shortener.New(pgrepo.NewLinkRepository(pool), pgrepo.NewVisitRepository(pool), generate, 150*time.Millisecond, log)
+	service := shortener.New(pgrepo.NewLinkRepository(pool), pgrepo.NewVisitRepository(pool), missingCache{}, generate, 150*time.Millisecond, log)
 	handler := httpdelivery.NewHandler(service, "https://sho.rt", log)
 	server := httptest.NewServer(httpdelivery.NewRouter(handler))
 	t.Cleanup(server.Close)
@@ -189,3 +191,12 @@ func TestShortenHTTPHidesDatabaseErrors(t *testing.T) {
 		}
 	}
 }
+
+// Existing PostgreSQL tests deliberately exercise the uncached path.
+// Redis integration tests use the real Redis adapter with unique keys.
+type missingCache struct{}
+
+func (missingCache) Get(context.Context, string) (domain.Link, bool, error) {
+	return domain.Link{}, false, nil
+}
+func (missingCache) Set(context.Context, domain.Link) error { return nil }

@@ -14,6 +14,7 @@ func clearEnvironment(t *testing.T) {
 		"HTTP_ADDR", "LOG_LEVEL", "HTTP_READ_HEADER_TIMEOUT", "PUBLIC_BASE_URL", "ANALYTICS_WRITE_TIMEOUT",
 		"HTTP_READ_TIMEOUT", "HTTP_WRITE_TIMEOUT", "HTTP_IDLE_TIMEOUT",
 		"POSTGRES_DSN", "POSTGRES_MAX_CONNS", "POSTGRES_MIN_CONNS", "POSTGRES_CONNECT_TIMEOUT",
+		"REDIS_ADDR", "REDIS_USERNAME", "REDIS_PASSWORD", "REDIS_DB", "REDIS_CACHE_TTL",
 	} {
 		t.Setenv(key, "")
 		if err := os.Unsetenv(key); err != nil {
@@ -40,6 +41,7 @@ func TestLoadDefaults(t *testing.T) {
 	}}
 	want.PublicBaseURL = "http://localhost:8080"
 	want.AnalyticsWriteTimeout = 150 * time.Millisecond
+	want.Redis = Redis{Addr: "localhost:6379", CacheTTL: time.Hour}
 	if got != want {
 		t.Fatalf("Load() = %+v, want %+v", got, want)
 	}
@@ -79,6 +81,7 @@ func TestLoadOverrides(t *testing.T) {
 	}}
 	want.PublicBaseURL = "https://sho.rt"
 	want.AnalyticsWriteTimeout = 25 * time.Millisecond
+	want.Redis = Redis{Addr: "localhost:6379", CacheTTL: time.Hour}
 	if got != want {
 		t.Fatalf("Load() = %+v, want %+v", got, want)
 	}

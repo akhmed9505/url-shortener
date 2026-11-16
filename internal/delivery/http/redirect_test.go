@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -30,7 +31,7 @@ func (s *visitStub) Record(ctx context.Context, visit domain.Visit) error {
 
 func redirectRouter(repository *repositoryStub, visits *visitStub, timeout time.Duration) http.Handler {
 	log := slog.New(slog.NewJSONHandler(io.Discard, nil))
-	service := shortener.New(repository, visits, shortener.GenerateCode, timeout, log)
+	service := shortener.New(repository, visits, missingCache{}, shortener.GenerateCode, timeout, log)
 	return NewRouter(NewHandler(service, "https://sho.rt", log))
 }
 
@@ -98,5 +99,36 @@ func TestRedirectHeadDoesNotAccessStorage(t *testing.T) {
 	}
 	if repository.calls != 0 || len(visits.visits) != 0 {
 		t.Fatal("HEAD accessed storage")
+	}
+}
+
+type missingCache struct{}
+
+func (missingCache) Get(context.Context, string) (domain.Link, bool, error) {
+	return domain.Link{}, false, nil
+}
+func (missingCache) Set(context.Context, domain.Link) error { return nil }
+
+func TestRedirectUnicodeLocation(t *testing.T) {
+	for _, original := range []string{
+		"https://example.org/путь/😀?q=поиск&encoded=a%20b#якорь",
+		"https://пример.рф/путь?q=поиск#якорь",
+		"https://example.org/%D0%BF%D1%83%D1%82%D1%8C?q=%D1%82%D0%B5%D1%81%D1%82",
+	} {
+		t.Run(original, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			redirectRouter(&repositoryStub{originalURL: original}, &visitStub{}, 150*time.Millisecond).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/s/docs", nil))
+			location := response.Header().Get("Location")
+			for _, char := range location {
+				if char > 127 {
+					t.Fatalf("non-ASCII Location %q", location)
+				}
+			}
+			got, err := url.Parse(location)
+			want, _ := url.Parse(original)
+			if err != nil || response.Code != 302 || got.Host != want.Host || got.Path != want.Path || got.Query().Encode() != want.Query().Encode() || got.Fragment != want.Fragment {
+				t.Fatalf("incorrect Unicode redirect: %q err=%v", location, err)
+			}
+		})
 	}
 }

@@ -17,7 +17,7 @@ func (s *Service) Resolve(ctx context.Context, code, userAgent string, visitedAt
 	if !validCode(code) {
 		return domain.Link{}, &ValidationError{Field: "code", Message: "Invalid short code"}
 	}
-	link, err := s.repository.FindByCode(ctx, code)
+	link, err := s.findLink(ctx, code)
 	if err != nil {
 		return domain.Link{}, err
 	}

@@ -56,7 +56,7 @@ func TestResolveRecordsRequestTimeAndUserAgent(t *testing.T) {
 		}
 		return nil
 	})
-	service := New(repository, visits, GenerateCode, 150*time.Millisecond, slog.New(slog.NewJSONHandler(io.Discard, nil)))
+	service := New(repository, visits, missingCache{}, GenerateCode, 150*time.Millisecond, slog.New(slog.NewJSONHandler(io.Discard, nil)))
 	got, err := service.Resolve(ctx, want.Code, "Browser/1.0", requestTime)
 	if err != nil || got != want || calls != 1 {
 		t.Fatalf("link=%+v calls=%d err=%v", got, calls, err)
@@ -74,7 +74,7 @@ func TestResolveLookupFailureDoesNotRecordVisit(t *testing.T) {
 			}), visitFunc(func(context.Context, domain.Visit) error {
 				t.Fatal("visit recorded after failed lookup")
 				return nil
-			}), GenerateCode, 150*time.Millisecond, slog.New(slog.NewJSONHandler(io.Discard, nil)))
+			}), missingCache{}, GenerateCode, 150*time.Millisecond, slog.New(slog.NewJSONHandler(io.Discard, nil)))
 			if _, err := service.Resolve(t.Context(), "docs", "", time.Now()); !errors.Is(err, want) {
 				t.Fatalf("error=%v want=%v", err, want)
 			}
@@ -89,7 +89,7 @@ func TestResolveRejectsInvalidCodeAndCanceledContext(t *testing.T) {
 	}), visitFunc(func(context.Context, domain.Visit) error {
 		t.Fatal("unexpected visit")
 		return nil
-	}), GenerateCode, 150*time.Millisecond, slog.New(slog.NewJSONHandler(io.Discard, nil)))
+	}), missingCache{}, GenerateCode, 150*time.Millisecond, slog.New(slog.NewJSONHandler(io.Discard, nil)))
 	for _, code := range []string{"ab", "bad/code", "код"} {
 		var validation *ValidationError
 		if _, err := service.Resolve(t.Context(), code, "", time.Now()); !errors.As(err, &validation) || validation.Field != "code" {
@@ -108,7 +108,7 @@ func TestResolveWriteFailureIsBestEffort(t *testing.T) {
 	want := domain.Link{ID: 1, Code: "docs", OriginalURL: "https://example.org/?token=private-secret"}
 	service := New(lookupFunc(func(context.Context, string) (domain.Link, error) { return want, nil }),
 		visitFunc(func(context.Context, domain.Visit) error { return errors.New("SQL private-secret") }),
-		GenerateCode, 150*time.Millisecond, slog.New(slog.NewJSONHandler(&logs, nil)))
+		missingCache{}, GenerateCode, 150*time.Millisecond, slog.New(slog.NewJSONHandler(&logs, nil)))
 	got, err := service.Resolve(t.Context(), want.Code, "private-secret", time.Now())
 	if err != nil || got != want {
 		t.Fatalf("link=%+v err=%v", got, err)
@@ -127,7 +127,7 @@ func TestResolveWriteTimeoutPreservesLinkAndParentContext(t *testing.T) {
 		visitFunc(func(child context.Context, _ domain.Visit) error {
 			<-child.Done()
 			return child.Err()
-		}), GenerateCode, 5*time.Millisecond, slog.New(slog.NewJSONHandler(&logs, nil)))
+		}), missingCache{}, GenerateCode, 5*time.Millisecond, slog.New(slog.NewJSONHandler(&logs, nil)))
 	got, err := service.Resolve(ctx, "docs", "", time.Now())
 	if err != nil || got != want || ctx.Err() != nil {
 		t.Fatalf("link=%+v err=%v parent=%v", got, err, ctx.Err())
@@ -149,7 +149,7 @@ func TestResolveWriteHonorsParentDeadline(t *testing.T) {
 			t.Fatal("write escaped parent deadline")
 		}
 		return nil
-	}), GenerateCode, time.Second, slog.New(slog.NewJSONHandler(io.Discard, nil)))
+	}), missingCache{}, GenerateCode, time.Second, slog.New(slog.NewJSONHandler(io.Discard, nil)))
 	if _, err := service.Resolve(ctx, "docs", "", time.Now()); err != nil {
 		t.Fatal(err)
 	}
@@ -174,3 +174,11 @@ func TestNormalizeUserAgent(t *testing.T) {
 		})
 	}
 }
+
+// These tests exercise PostgreSQL lookup and best-effort visit recording.
+type missingCache struct{}
+
+func (missingCache) Get(context.Context, string) (domain.Link, bool, error) {
+	return domain.Link{}, false, nil
+}
+func (missingCache) Set(context.Context, domain.Link) error { return nil }

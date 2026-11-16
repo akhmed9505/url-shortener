@@ -19,8 +19,9 @@ import (
 )
 
 type repositoryStub struct {
-	err   error
-	calls int
+	err         error
+	calls       int
+	originalURL string
 }
 
 func (r *repositoryStub) Create(_ context.Context, code, raw string) (domain.Link, error) {
@@ -30,7 +31,7 @@ func (r *repositoryStub) Create(_ context.Context, code, raw string) (domain.Lin
 
 func testHandler(repository *repositoryStub) *Handler {
 	log := slog.New(slog.NewJSONHandler(io.Discard, nil))
-	service := shortener.New(repository, &visitStub{}, func() (string, error) { return "AbC123z9", nil }, 150*time.Millisecond, log)
+	service := shortener.New(repository, &visitStub{}, missingCache{}, func() (string, error) { return "AbC123z9", nil }, 150*time.Millisecond, log)
 	return NewHandler(service, "https://sho.rt", log)
 }
 
@@ -191,5 +192,9 @@ func assertAPIError(t *testing.T, response *httptest.ResponseRecorder, status in
 
 func (r *repositoryStub) FindByCode(_ context.Context, code string) (domain.Link, error) {
 	r.calls++
-	return domain.Link{ID: 1, Code: code, OriginalURL: "https://example.org/target"}, r.err
+	originalURL := r.originalURL
+	if originalURL == "" {
+		originalURL = "https://example.org/target"
+	}
+	return domain.Link{ID: 1, Code: code, OriginalURL: originalURL}, r.err
 }

@@ -19,6 +19,5 @@ func (h *Handler) Redirect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Location", link.OriginalURL)
-	w.WriteHeader(http.StatusFound)
+	http.Redirect(w, r, link.OriginalURL, http.StatusFound)
 }

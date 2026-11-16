@@ -1,4 +1,4 @@
-.PHONY: run build test race vet fmt fmt-check check tidy postgres-up postgres-down postgres-test-up postgres-test-down migrate-up migrate-down migrate-status test-integration
+.PHONY: run build test race vet fmt fmt-check check tidy postgres-up postgres-down postgres-test-up postgres-test-down redis-up redis-down redis-test-up redis-test-down deps-up deps-down test-deps-up test-deps-down migrate-up migrate-down migrate-status test-integration
 
 GOOSE_VERSION := v3.30.1
 GOOSE_TAGS := no_clickhouse,no_libsql,no_mssql,no_mysql,no_sqlite3,no_vertica,no_ydb
@@ -36,13 +36,37 @@ postgres-up:
 	docker compose -f docker-compose.yml up -d --wait postgres
 
 postgres-down:
-	docker compose -f docker-compose.yml down
+	docker compose -f docker-compose.yml stop postgres
 
 postgres-test-up:
 	POSTGRES_PORT=55432 docker compose -f docker-compose.yml -p shortener-test up -d --wait postgres
 
 postgres-test-down:
-	POSTGRES_PORT=55432 docker compose -f docker-compose.yml -p shortener-test down
+	POSTGRES_PORT=55432 docker compose -f docker-compose.yml -p shortener-test stop postgres
+
+redis-up:
+	docker compose -f docker-compose.yml up -d --wait redis
+
+redis-down:
+	docker compose -f docker-compose.yml stop redis
+
+redis-test-up:
+	REDIS_PORT=56379 docker compose -f docker-compose.yml -p shortener-test up -d --wait redis
+
+redis-test-down:
+	REDIS_PORT=56379 docker compose -f docker-compose.yml -p shortener-test stop redis
+
+deps-up:
+	docker compose -f docker-compose.yml up -d --wait postgres redis
+
+deps-down:
+	docker compose -f docker-compose.yml down
+
+test-deps-up:
+	POSTGRES_PORT=55432 REDIS_PORT=56379 docker compose -f docker-compose.yml -p shortener-test up -d --wait postgres redis
+
+test-deps-down:
+	POSTGRES_PORT=55432 REDIS_PORT=56379 docker compose -f docker-compose.yml -p shortener-test down
 
 migrate-up:
 	@$(LOAD_ENV) $(GOOSE) up
@@ -56,4 +80,4 @@ migrate-status:
 # TEST_POSTGRES_DSN must be a URL on a dedicated test PostgreSQL instance.
 # The user must be allowed to create databases. Each test creates and drops its own database.
 test-integration:
-	@$(LOAD_ENV) TEST_POSTGRES_DSN="$${TEST_POSTGRES_DSN:-postgres://shortener:shortener@localhost:55432/shortener?sslmode=disable}" go test -count=1 -timeout=2m -tags=integration ./tests/integration/...
+	@$(LOAD_ENV) TEST_POSTGRES_DSN="$${TEST_POSTGRES_DSN:-postgres://shortener:shortener@localhost:55432/shortener?sslmode=disable}" TEST_REDIS_ADDR="$${TEST_REDIS_ADDR:-localhost:56379}" go test -count=1 -timeout=2m -tags=integration ./tests/integration/...

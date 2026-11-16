@@ -23,6 +23,7 @@ type Config struct {
 	Postgres              Postgres
 	PublicBaseURL         string
 	AnalyticsWriteTimeout time.Duration
+	Redis                 Redis
 }
 
 type Postgres struct {
@@ -148,6 +149,10 @@ func Load() (Config, error) {
 	}
 	if cfg.AnalyticsWriteTimeout >= HTTPRequestTimeout {
 		return Config{}, fmt.Errorf("ANALYTICS_WRITE_TIMEOUT must be less than 2s")
+	}
+	cfg.Redis, err = loadRedis()
+	if err != nil {
+		return Config{}, err
 	}
 	return cfg, nil
 }
