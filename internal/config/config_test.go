@@ -11,7 +11,7 @@ import (
 func clearEnvironment(t *testing.T) {
 	t.Helper()
 	for _, key := range []string{
-		"HTTP_ADDR", "LOG_LEVEL", "HTTP_READ_HEADER_TIMEOUT",
+		"HTTP_ADDR", "LOG_LEVEL", "HTTP_READ_HEADER_TIMEOUT", "PUBLIC_BASE_URL",
 		"HTTP_READ_TIMEOUT", "HTTP_WRITE_TIMEOUT", "HTTP_IDLE_TIMEOUT",
 		"POSTGRES_DSN", "POSTGRES_MAX_CONNS", "POSTGRES_MIN_CONNS", "POSTGRES_CONNECT_TIMEOUT",
 	} {
@@ -38,6 +38,7 @@ func TestLoadDefaults(t *testing.T) {
 		DSN:      "postgres://shortener:shortener@localhost:5432/shortener?sslmode=disable",
 		MaxConns: 10, MinConns: 0, ConnectTimeout: 5 * time.Second,
 	}}
+	want.PublicBaseURL = "http://localhost:8080"
 	if got != want {
 		t.Fatalf("Load() = %+v, want %+v", got, want)
 	}
@@ -46,6 +47,7 @@ func TestLoadDefaults(t *testing.T) {
 func TestLoadOverrides(t *testing.T) {
 	clearEnvironment(t)
 	for key, value := range map[string]string{
+		"PUBLIC_BASE_URL":          "https://sho.rt/",
 		"HTTP_ADDR":                "[::1]:9000",
 		"LOG_LEVEL":                "debug",
 		"HTTP_READ_HEADER_TIMEOUT": "250ms",
@@ -73,6 +75,7 @@ func TestLoadOverrides(t *testing.T) {
 		DSN:      "postgres://test:test@localhost:5433/test?sslmode=disable",
 		MaxConns: 20, MinConns: 2, ConnectTimeout: 2 * time.Second,
 	}}
+	want.PublicBaseURL = "https://sho.rt"
 	if got != want {
 		t.Fatalf("Load() = %+v, want %+v", got, want)
 	}
@@ -147,6 +150,26 @@ func TestLoadRejectsInvalidPostgresConfiguration(t *testing.T) {
 			}
 			if strings.Contains(err.Error(), "secret") {
 				t.Fatal("validation error exposes DSN credentials")
+			}
+		})
+	}
+}
+
+func TestLoadRejectsInvalidPublicBaseURL(t *testing.T) {
+	for _, value := range []string{
+		"", "example.org", "ftp://example.org", "https:///path", "https://:443",
+		"https://user:secret@example.org", "https://example.org/path", "https://example.org?x=1",
+		"https://example.org?", "https://example.org#", "https://example.org\\evil",
+		"https://example.org:0", "https://example.org:65536", "https://example.org:",
+		"http://[bad]", "https://example.org/\u00a0", "https://example.org/\x7f",
+		"http://[bad]/",
+	} {
+		t.Run(value, func(t *testing.T) {
+			clearEnvironment(t)
+			t.Setenv("PUBLIC_BASE_URL", value)
+			_, err := Load()
+			if err == nil || !strings.Contains(err.Error(), "PUBLIC_BASE_URL") || strings.Contains(err.Error(), "secret") {
+				t.Fatalf("unexpected error: %v", err)
 			}
 		})
 	}

@@ -33,16 +33,16 @@ tidy:
 check: fmt-check test race vet build
 
 postgres-up:
-	docker compose up -d --wait postgres
+	docker compose -f docker-compose.yml up -d --wait postgres
 
 postgres-down:
-	docker compose down
+	docker compose -f docker-compose.yml down
 
 postgres-test-up:
-	POSTGRES_PORT=55432 docker compose -p shortener-test up -d --wait postgres
+	POSTGRES_PORT=55432 docker compose -f docker-compose.yml -p shortener-test up -d --wait postgres
 
 postgres-test-down:
-	POSTGRES_PORT=55432 docker compose -p shortener-test down
+	POSTGRES_PORT=55432 docker compose -f docker-compose.yml -p shortener-test down
 
 migrate-up:
 	@$(LOAD_ENV) $(GOOSE) up

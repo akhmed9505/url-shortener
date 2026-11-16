@@ -4,17 +4,22 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 )
 
 type Config struct {
-	HTTP     HTTP
-	LogLevel slog.Level
-	Postgres Postgres
+	HTTP          HTTP
+	LogLevel      slog.Level
+	Postgres      Postgres
+	PublicBaseURL string
 }
 
 type Postgres struct {
@@ -45,6 +50,29 @@ func Load() (Config, error) {
 		MinConns:       0,
 		ConnectTimeout: 5 * time.Second,
 	}}
+	cfg.PublicBaseURL = "http://localhost:8080"
+	if value, ok := os.LookupEnv("PUBLIC_BASE_URL"); ok {
+		cfg.PublicBaseURL = value
+	}
+	base, err := url.Parse(cfg.PublicBaseURL)
+	if err != nil || !utf8.ValidString(cfg.PublicBaseURL) ||
+		strings.IndexFunc(cfg.PublicBaseURL, func(char rune) bool { return unicode.IsSpace(char) || unicode.IsControl(char) }) >= 0 ||
+		(base.Scheme != "http" && base.Scheme != "https") ||
+		base.Hostname() == "" || base.User != nil || base.Opaque != "" ||
+		(base.Path != "" && base.Path != "/") || strings.ContainsAny(cfg.PublicBaseURL, "?#\\") ||
+		strings.HasSuffix(base.Host, ":") {
+		return Config{}, fmt.Errorf("PUBLIC_BASE_URL must be an HTTP or HTTPS origin without credentials, query or fragment")
+	}
+	if port := base.Port(); port != "" {
+		value, err := strconv.Atoi(port)
+		if err != nil || value < 1 || value > 65535 {
+			return Config{}, fmt.Errorf("PUBLIC_BASE_URL port must be between 1 and 65535")
+		}
+	}
+	if strings.HasPrefix(base.Host, "[") && net.ParseIP(base.Hostname()) == nil {
+		return Config{}, fmt.Errorf("PUBLIC_BASE_URL must contain a valid IP address")
+	}
+	cfg.PublicBaseURL = strings.TrimSuffix(base.String(), "/")
 
 	if dsn, ok := os.LookupEnv("POSTGRES_DSN"); ok {
 		cfg.Postgres.DSN = dsn

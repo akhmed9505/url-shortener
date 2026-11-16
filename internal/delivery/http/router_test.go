@@ -9,7 +9,7 @@ import (
 
 func TestHealthLive(t *testing.T) {
 	response := httptest.NewRecorder()
-	NewRouter().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/health/live", nil))
+	NewRouter(testHandler(&repositoryStub{})).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/health/live", nil))
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
 	}
@@ -32,7 +32,7 @@ func TestHealthLiveRejectsUnsupportedMethods(t *testing.T) {
 	for _, method := range []string{http.MethodPost, http.MethodHead, http.MethodDelete} {
 		t.Run(method, func(t *testing.T) {
 			response := httptest.NewRecorder()
-			NewRouter().ServeHTTP(response, httptest.NewRequest(method, "/health/live", nil))
+			NewRouter(testHandler(&repositoryStub{})).ServeHTTP(response, httptest.NewRequest(method, "/health/live", nil))
 			if response.Code != http.StatusMethodNotAllowed {
 				t.Errorf("status = %d, want %d", response.Code, http.StatusMethodNotAllowed)
 			}
@@ -45,8 +45,18 @@ func TestHealthLiveRejectsUnsupportedMethods(t *testing.T) {
 
 func TestUnknownRoute(t *testing.T) {
 	response := httptest.NewRecorder()
-	NewRouter().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/unknown", nil))
+	NewRouter(testHandler(&repositoryStub{})).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/unknown", nil))
 	if response.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusNotFound)
+	}
+	assertAPIError(t, response, http.StatusNotFound, "not_found")
+}
+
+func TestShortenRejectsUnsupportedMethods(t *testing.T) {
+	response := httptest.NewRecorder()
+	NewRouter(testHandler(&repositoryStub{})).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/shorten", nil))
+	assertAPIError(t, response, http.StatusMethodNotAllowed, "method_not_allowed")
+	if got := response.Header().Get("Allow"); got != http.MethodPost {
+		t.Fatalf("Allow = %q, want POST", got)
 	}
 }

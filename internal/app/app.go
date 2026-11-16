@@ -10,20 +10,21 @@ import (
 
 	"github.com/akhmed9505/url-shortener/internal/config"
 	httpdelivery "github.com/akhmed9505/url-shortener/internal/delivery/http"
+	"github.com/akhmed9505/url-shortener/internal/domain"
 	"github.com/akhmed9505/url-shortener/internal/infra/postgres"
+	pgrepo "github.com/akhmed9505/url-shortener/internal/repository/postgres"
+	"github.com/akhmed9505/url-shortener/internal/service/shortener"
 )
 
 type App struct {
-	server   *http.Server
-	log      *slog.Logger
-	postgres config.Postgres
+	log *slog.Logger
+	cfg config.Config
 }
 
 func New(cfg config.Config, log *slog.Logger) *App {
 	return &App{
-		server:   httpdelivery.NewServer(cfg.HTTP, httpdelivery.NewRouter(), log),
-		log:      log,
-		postgres: cfg.Postgres,
+		log: log,
+		cfg: cfg,
 	}
 }
 
@@ -31,16 +32,20 @@ func (a *App) Run(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	pool, err := postgres.NewPool(ctx, a.postgres)
+	pool, err := postgres.NewPool(ctx, a.cfg.Postgres)
 	if err != nil {
-		return err
+		return domain.ErrStorageUnavailable
 	}
 	defer pool.Close()
 	a.log.Info("PostgreSQL pool connected")
+	repository := pgrepo.NewLinkRepository(pool)
+	service := shortener.New(repository, shortener.GenerateCode)
+	handler := httpdelivery.NewHandler(service, a.cfg.PublicBaseURL, a.log)
+	server := httpdelivery.NewServer(a.cfg.HTTP, httpdelivery.NewRouter(handler), a.log)
 	serverErrors := make(chan error, 1)
 	go func() {
-		a.log.Info("starting HTTP server", "addr", a.server.Addr)
-		serverErrors <- a.server.ListenAndServe()
+		a.log.Info("starting HTTP server", "addr", server.Addr)
+		serverErrors <- server.ListenAndServe()
 	}()
 
 	select {
@@ -52,8 +57,8 @@ func (a *App) Run(ctx context.Context) error {
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := a.server.Shutdown(shutdownCtx); err != nil {
-		closeErr := a.server.Close()
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		closeErr := server.Close()
 		return fmt.Errorf("shut down HTTP server: %w", errors.Join(err, closeErr))
 	}
 	if err := <-serverErrors; !errors.Is(err, http.ErrServerClosed) {
