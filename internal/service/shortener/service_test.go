@@ -3,7 +3,10 @@ package shortener
 import (
 	"context"
 	"errors"
+	"io"
+	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/akhmed9505/url-shortener/internal/domain"
 )
@@ -23,7 +26,7 @@ func TestCreateWithAlias(t *testing.T) {
 		}
 		return want, nil
 	})
-	service := New(repository, func() (string, error) {
+	service := newCreateService(repository, func() (string, error) {
 		t.Fatal("generator called for explicit alias")
 		return "", nil
 	})
@@ -36,7 +39,7 @@ func TestCreateWithAlias(t *testing.T) {
 func TestCreateRetriesRandomCollisions(t *testing.T) {
 	calls, generated := 0, 0
 	codes := []string{"Conflict", "Success8"}
-	service := New(repositoryFunc(func(_ context.Context, code, raw string) (domain.Link, error) {
+	service := newCreateService(repositoryFunc(func(_ context.Context, code, raw string) (domain.Link, error) {
 		calls++
 		if code == codes[0] {
 			return domain.Link{}, domain.ErrCodeConflict
@@ -55,7 +58,7 @@ func TestCreateRetriesRandomCollisions(t *testing.T) {
 
 func TestCreateStopsAfterFiveCollisions(t *testing.T) {
 	calls, generated := 0, 0
-	service := New(repositoryFunc(func(context.Context, string, string) (domain.Link, error) {
+	service := newCreateService(repositoryFunc(func(context.Context, string, string) (domain.Link, error) {
 		calls++
 		return domain.Link{}, domain.ErrCodeConflict
 	}), func() (string, error) {
@@ -81,7 +84,7 @@ func TestCreateDoesNotRetryOtherErrorsOrAliasConflict(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			calls := 0
-			service := New(repositoryFunc(func(context.Context, string, string) (domain.Link, error) {
+			service := newCreateService(repositoryFunc(func(context.Context, string, string) (domain.Link, error) {
 				calls++
 				return domain.Link{}, tc.err
 			}), func() (string, error) { return "Random12", nil })
@@ -95,7 +98,7 @@ func TestCreateDoesNotRetryOtherErrorsOrAliasConflict(t *testing.T) {
 
 func TestCreateGeneratorFailure(t *testing.T) {
 	want := errors.New("entropy failure")
-	service := New(repositoryFunc(func(context.Context, string, string) (domain.Link, error) {
+	service := newCreateService(repositoryFunc(func(context.Context, string, string) (domain.Link, error) {
 		t.Fatal("repository called after generator failure")
 		return domain.Link{}, nil
 	}), func() (string, error) { return "", want })
@@ -106,7 +109,7 @@ func TestCreateGeneratorFailure(t *testing.T) {
 
 func TestCreateRejectsInvalidInputBeforeRepository(t *testing.T) {
 	empty := ""
-	service := New(repositoryFunc(func(context.Context, string, string) (domain.Link, error) {
+	service := newCreateService(repositoryFunc(func(context.Context, string, string) (domain.Link, error) {
 		t.Fatal("repository called for invalid input")
 		return domain.Link{}, nil
 	}), func() (string, error) {
@@ -129,4 +132,14 @@ func TestCreateRejectsInvalidInputBeforeRepository(t *testing.T) {
 	if _, err := service.Create(ctx, "https://example.org", nil); !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected cancellation, got %v", err)
 	}
+}
+
+func (f repositoryFunc) FindByCode(context.Context, string) (domain.Link, error) {
+	panic("unexpected FindByCode during creation")
+}
+
+func newCreateService(repository LinkRepository, generate func() (string, error)) *Service {
+	visits := visitFunc(func(context.Context, domain.Visit) error { panic("unexpected Record during creation") })
+	log := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	return New(repository, visits, generate, 150*time.Millisecond, log)
 }

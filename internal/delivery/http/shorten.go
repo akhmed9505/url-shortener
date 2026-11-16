@@ -12,6 +12,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/akhmed9505/url-shortener/internal/config"
 	"github.com/akhmed9505/url-shortener/internal/domain"
 	"github.com/akhmed9505/url-shortener/internal/service/shortener"
 )
@@ -66,11 +67,11 @@ func (h *Handler) Shorten(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_json", "Expected one JSON object with string url and optional string alias", "")
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), config.HTTPRequestTimeout)
 	defer cancel()
 	link, err := h.shortener.Create(ctx, request.URL, request.Alias)
 	if err != nil {
-		h.creationError(w, r, err)
+		h.operationError(w, r, err)
 		return
 	}
 	shortURL := h.baseURL + "/s/" + link.Code
@@ -121,7 +122,7 @@ func decodeShortenRequest(body []byte) (ShortenRequest, error) {
 	return request, nil
 }
 
-func (h *Handler) creationError(w http.ResponseWriter, r *http.Request, err error) {
+func (h *Handler) operationError(w http.ResponseWriter, r *http.Request, err error) {
 	if r.Context().Err() != nil {
 		return
 	}
@@ -131,6 +132,8 @@ func (h *Handler) creationError(w http.ResponseWriter, r *http.Request, err erro
 		writeError(w, r, http.StatusBadRequest, "invalid_"+validation.Field, validation.Message, validation.Field)
 	case errors.Is(err, domain.ErrCodeConflict):
 		writeError(w, r, http.StatusConflict, "alias_taken", "Alias is already in use", "alias")
+	case errors.Is(err, domain.ErrLinkNotFound):
+		writeError(w, r, http.StatusNotFound, "link_not_found", "Link not found", "")
 	case errors.Is(err, context.DeadlineExceeded):
 		writeError(w, r, http.StatusGatewayTimeout, "request_timeout", "Request timed out", "")
 	default:
@@ -140,7 +143,7 @@ func (h *Handler) creationError(w http.ResponseWriter, r *http.Request, err erro
 		} else if errors.Is(err, shortener.ErrCodeGenerationExhausted) {
 			code = "code_generation_exhausted"
 		}
-		h.log.Error("short link creation failed", "request_id", requestID(r), "error_code", code)
+		h.log.Error("shortener operation failed", "request_id", requestID(r), "error_code", code)
 		writeError(w, r, status, code, message, "")
 	}
 }

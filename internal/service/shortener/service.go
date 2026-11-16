@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"time"
 
 	"github.com/akhmed9505/url-shortener/internal/domain"
 )
@@ -12,15 +14,29 @@ var ErrCodeGenerationExhausted = errors.New("short code generation attempts exha
 
 type LinkRepository interface {
 	Create(ctx context.Context, code, originalURL string) (domain.Link, error)
+	FindByCode(ctx context.Context, code string) (domain.Link, error)
+}
+
+type VisitRepository interface {
+	Record(ctx context.Context, visit domain.Visit) error
 }
 
 type Service struct {
-	repository LinkRepository
-	generate   func() (string, error)
+	repository   LinkRepository
+	visits       VisitRepository
+	generate     func() (string, error)
+	writeTimeout time.Duration
+	log          *slog.Logger
 }
 
-func New(repository LinkRepository, generate func() (string, error)) *Service {
-	return &Service{repository: repository, generate: generate}
+func New(repository LinkRepository, visits VisitRepository, generate func() (string, error), writeTimeout time.Duration, log *slog.Logger) *Service {
+	return &Service{
+		repository:   repository,
+		visits:       visits,
+		generate:     generate,
+		writeTimeout: writeTimeout,
+		log:          log,
+	}
 }
 
 func (s *Service) Create(ctx context.Context, originalURL string, alias *string) (domain.Link, error) {

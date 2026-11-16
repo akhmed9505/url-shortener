@@ -15,11 +15,14 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+const HTTPRequestTimeout = 2 * time.Second
+
 type Config struct {
-	HTTP          HTTP
-	LogLevel      slog.Level
-	Postgres      Postgres
-	PublicBaseURL string
+	HTTP                  HTTP
+	LogLevel              slog.Level
+	Postgres              Postgres
+	PublicBaseURL         string
+	AnalyticsWriteTimeout time.Duration
 }
 
 type Postgres struct {
@@ -51,6 +54,7 @@ func Load() (Config, error) {
 		ConnectTimeout: 5 * time.Second,
 	}}
 	cfg.PublicBaseURL = "http://localhost:8080"
+	cfg.AnalyticsWriteTimeout = 150 * time.Millisecond
 	if value, ok := os.LookupEnv("PUBLIC_BASE_URL"); ok {
 		cfg.PublicBaseURL = value
 	}
@@ -59,7 +63,7 @@ func Load() (Config, error) {
 		strings.IndexFunc(cfg.PublicBaseURL, func(char rune) bool { return unicode.IsSpace(char) || unicode.IsControl(char) }) >= 0 ||
 		(base.Scheme != "http" && base.Scheme != "https") ||
 		base.Hostname() == "" || base.User != nil || base.Opaque != "" ||
-		(base.Path != "" && base.Path != "/") || strings.ContainsAny(cfg.PublicBaseURL, "?#\\") ||
+		(base.Path != "" && base.Path != "/") || base.RawPath != "" || strings.ContainsAny(cfg.PublicBaseURL, "?#\\") ||
 		strings.HasSuffix(base.Host, ":") {
 		return Config{}, fmt.Errorf("PUBLIC_BASE_URL must be an HTTP or HTTPS origin without credentials, query or fragment")
 	}
@@ -129,6 +133,7 @@ func Load() (Config, error) {
 		{"HTTP_WRITE_TIMEOUT", &cfg.HTTP.WriteTimeout},
 		{"HTTP_IDLE_TIMEOUT", &cfg.HTTP.IdleTimeout},
 		{"POSTGRES_CONNECT_TIMEOUT", &cfg.Postgres.ConnectTimeout},
+		{"ANALYTICS_WRITE_TIMEOUT", &cfg.AnalyticsWriteTimeout},
 	} {
 		if raw, ok := os.LookupEnv(setting.name); ok {
 			duration, err := time.ParseDuration(raw)
@@ -140,6 +145,9 @@ func Load() (Config, error) {
 	}
 	if cfg.HTTP.ReadHeaderTimeout > cfg.HTTP.ReadTimeout {
 		return Config{}, fmt.Errorf("HTTP_READ_HEADER_TIMEOUT must not exceed HTTP_READ_TIMEOUT")
+	}
+	if cfg.AnalyticsWriteTimeout >= HTTPRequestTimeout {
+		return Config{}, fmt.Errorf("ANALYTICS_WRITE_TIMEOUT must be less than 2s")
 	}
 	return cfg, nil
 }

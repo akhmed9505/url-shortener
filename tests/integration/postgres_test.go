@@ -241,12 +241,10 @@ func TestOtherDatabaseErrorsAreNotCodeConflicts(t *testing.T) {
 
 func TestMigrationUpDown(t *testing.T) {
 	pool, provider := newDatabase(t, false)
-	for _, up := range []bool{true, false, true} {
+	for _, wantVersion := range []int64{2, 1, 0, 2} {
 		var err error
-		var wantVersion int64
-		if up {
+		if wantVersion == 2 {
 			_, err = provider.Up(t.Context())
-			wantVersion = 1
 		} else {
 			_, err = provider.Down(t.Context())
 		}
@@ -257,9 +255,10 @@ func TestMigrationUpDown(t *testing.T) {
 		if err != nil || version != wantVersion {
 			t.Fatalf("version=%d err=%v, want %d", version, err, wantVersion)
 		}
-		var exists bool
-		if err := pool.QueryRow(t.Context(), "SELECT to_regclass('public.links') IS NOT NULL").Scan(&exists); err != nil || exists != up {
-			t.Fatalf("links exists=%v err=%v", exists, err)
+		var links, visits bool
+		err = pool.QueryRow(t.Context(), "SELECT to_regclass('public.links') IS NOT NULL, to_regclass('public.visits') IS NOT NULL").Scan(&links, &visits)
+		if err != nil || links != (wantVersion >= 1) || visits != (wantVersion >= 2) {
+			t.Fatalf("links=%v visits=%v version=%d err=%v", links, visits, version, err)
 		}
 	}
 }

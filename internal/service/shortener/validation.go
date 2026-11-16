@@ -51,15 +51,21 @@ func ValidateURL(raw string) error {
 }
 
 func ValidateAlias(alias string) error {
-	invalid := &ValidationError{Field: "alias", Message: "Alias must contain 3 to 32 characters from A-Z, a-z, 0-9, underscore and hyphen"}
-	if len(alias) < 3 || len(alias) > 32 {
-		return invalid
-	}
-	for _, char := range alias {
-		if !(char >= 'A' && char <= 'Z' || char >= 'a' && char <= 'z' ||
-			char >= '0' && char <= '9' || char == '_' || char == '-') {
-			return invalid
-		}
+	if !validCode(alias) {
+		return &ValidationError{Field: "alias", Message: "Alias must contain 3 to 32 characters from A-Z, a-z, 0-9, underscore and hyphen"}
 	}
 	return nil
+}
+
+func validCode(code string) bool {
+	if len(code) < 3 || len(code) > 32 {
+		return false
+	}
+	for _, char := range code {
+		if !(char >= 'A' && char <= 'Z' || char >= 'a' && char <= 'z' ||
+			char >= '0' && char <= '9' || char == '_' || char == '-') {
+			return false
+		}
+	}
+	return true
 }

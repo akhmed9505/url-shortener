@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	httpdelivery "github.com/akhmed9505/url-shortener/internal/delivery/http"
 	pgrepo "github.com/akhmed9505/url-shortener/internal/repository/postgres"
@@ -21,8 +22,9 @@ import (
 
 func newShortenServer(t *testing.T, pool *pgxpool.Pool, generate func() (string, error), logs io.Writer) *httptest.Server {
 	t.Helper()
-	service := shortener.New(pgrepo.NewLinkRepository(pool), generate)
-	handler := httpdelivery.NewHandler(service, "https://sho.rt", slog.New(slog.NewJSONHandler(logs, nil)))
+	log := slog.New(slog.NewJSONHandler(logs, nil))
+	service := shortener.New(pgrepo.NewLinkRepository(pool), pgrepo.NewVisitRepository(pool), generate, 150*time.Millisecond, log)
+	handler := httpdelivery.NewHandler(service, "https://sho.rt", log)
 	server := httptest.NewServer(httpdelivery.NewRouter(handler))
 	t.Cleanup(server.Close)
 	return server
@@ -171,7 +173,7 @@ func TestShortenHTTPForcedCollisionsAndExhaustion(t *testing.T) {
 
 func TestShortenHTTPHidesDatabaseErrors(t *testing.T) {
 	pool, _ := newDatabase(t, true)
-	if _, err := pool.Exec(t.Context(), "DROP TABLE links"); err != nil {
+	if _, err := pool.Exec(t.Context(), "DROP TABLE links CASCADE"); err != nil {
 		t.Fatal(err)
 	}
 	var logs bytes.Buffer

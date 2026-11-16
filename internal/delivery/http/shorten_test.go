@@ -29,8 +29,9 @@ func (r *repositoryStub) Create(_ context.Context, code, raw string) (domain.Lin
 }
 
 func testHandler(repository *repositoryStub) *Handler {
-	service := shortener.New(repository, func() (string, error) { return "AbC123z9", nil })
-	return NewHandler(service, "https://sho.rt", slog.New(slog.NewJSONHandler(io.Discard, nil)))
+	log := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	service := shortener.New(repository, &visitStub{}, func() (string, error) { return "AbC123z9", nil }, 150*time.Millisecond, log)
+	return NewHandler(service, "https://sho.rt", log)
 }
 
 func TestShortenCreated(t *testing.T) {
@@ -186,4 +187,9 @@ func assertAPIError(t *testing.T, response *httptest.ResponseRecorder, status in
 	if response.Header().Get("Content-Type") != "application/json" {
 		t.Fatal("missing JSON content type")
 	}
+}
+
+func (r *repositoryStub) FindByCode(_ context.Context, code string) (domain.Link, error) {
+	r.calls++
+	return domain.Link{ID: 1, Code: code, OriginalURL: "https://example.org/target"}, r.err
 }

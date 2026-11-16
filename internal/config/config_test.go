@@ -11,7 +11,7 @@ import (
 func clearEnvironment(t *testing.T) {
 	t.Helper()
 	for _, key := range []string{
-		"HTTP_ADDR", "LOG_LEVEL", "HTTP_READ_HEADER_TIMEOUT", "PUBLIC_BASE_URL",
+		"HTTP_ADDR", "LOG_LEVEL", "HTTP_READ_HEADER_TIMEOUT", "PUBLIC_BASE_URL", "ANALYTICS_WRITE_TIMEOUT",
 		"HTTP_READ_TIMEOUT", "HTTP_WRITE_TIMEOUT", "HTTP_IDLE_TIMEOUT",
 		"POSTGRES_DSN", "POSTGRES_MAX_CONNS", "POSTGRES_MIN_CONNS", "POSTGRES_CONNECT_TIMEOUT",
 	} {
@@ -39,6 +39,7 @@ func TestLoadDefaults(t *testing.T) {
 		MaxConns: 10, MinConns: 0, ConnectTimeout: 5 * time.Second,
 	}}
 	want.PublicBaseURL = "http://localhost:8080"
+	want.AnalyticsWriteTimeout = 150 * time.Millisecond
 	if got != want {
 		t.Fatalf("Load() = %+v, want %+v", got, want)
 	}
@@ -47,6 +48,7 @@ func TestLoadDefaults(t *testing.T) {
 func TestLoadOverrides(t *testing.T) {
 	clearEnvironment(t)
 	for key, value := range map[string]string{
+		"ANALYTICS_WRITE_TIMEOUT":  "25ms",
 		"PUBLIC_BASE_URL":          "https://sho.rt/",
 		"HTTP_ADDR":                "[::1]:9000",
 		"LOG_LEVEL":                "debug",
@@ -76,6 +78,7 @@ func TestLoadOverrides(t *testing.T) {
 		MaxConns: 20, MinConns: 2, ConnectTimeout: 2 * time.Second,
 	}}
 	want.PublicBaseURL = "https://sho.rt"
+	want.AnalyticsWriteTimeout = 25 * time.Millisecond
 	if got != want {
 		t.Fatalf("Load() = %+v, want %+v", got, want)
 	}
@@ -108,7 +111,7 @@ func TestLoadRejectsInvalidLogLevel(t *testing.T) {
 }
 
 func TestLoadRejectsInvalidTimeouts(t *testing.T) {
-	for _, key := range []string{"HTTP_READ_HEADER_TIMEOUT", "HTTP_READ_TIMEOUT", "HTTP_WRITE_TIMEOUT", "HTTP_IDLE_TIMEOUT", "POSTGRES_CONNECT_TIMEOUT"} {
+	for _, key := range []string{"HTTP_READ_HEADER_TIMEOUT", "HTTP_READ_TIMEOUT", "HTTP_WRITE_TIMEOUT", "HTTP_IDLE_TIMEOUT", "POSTGRES_CONNECT_TIMEOUT", "ANALYTICS_WRITE_TIMEOUT"} {
 		for _, value := range []string{"", "0s", "-1s", "10", "invalid", "999999999999999999999h"} {
 			t.Run(key+"/"+value, func(t *testing.T) {
 				clearEnvironment(t)
@@ -161,7 +164,7 @@ func TestLoadRejectsInvalidPublicBaseURL(t *testing.T) {
 		"https://user:secret@example.org", "https://example.org/path", "https://example.org?x=1",
 		"https://example.org?", "https://example.org#", "https://example.org\\evil",
 		"https://example.org:0", "https://example.org:65536", "https://example.org:",
-		"http://[bad]", "https://example.org/\u00a0", "https://example.org/\x7f",
+		"http://[bad]", "https://example.org/%2f", "https://example.org/%2F", "https://example.org/%2e", "https://example.org/%5c", "https://example.org/%252f", "https://example.org/\u00a0", "https://example.org/\x7f",
 		"http://[bad]/",
 	} {
 		t.Run(value, func(t *testing.T) {
@@ -172,5 +175,15 @@ func TestLoadRejectsInvalidPublicBaseURL(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 		})
+	}
+}
+
+func TestLoadRejectsAnalyticsTimeoutExceedingRequestBudget(t *testing.T) {
+	for _, value := range []string{"2s", "3s"} {
+		clearEnvironment(t)
+		t.Setenv("ANALYTICS_WRITE_TIMEOUT", value)
+		if _, err := Load(); err == nil || !strings.Contains(err.Error(), "ANALYTICS_WRITE_TIMEOUT") {
+			t.Fatalf("expected timeout validation error, got %v", err)
+		}
 	}
 }

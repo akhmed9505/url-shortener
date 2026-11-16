@@ -61,6 +61,10 @@ func storageError(err error) error {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return err
 	}
+	var connectErr *pgconn.ConnectError
+	if errors.As(err, &connectErr) {
+		return fmt.Errorf("%w: %w", domain.ErrStorageUnavailable, err)
+	}
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
 		if strings.HasPrefix(pgErr.Code, "08") || pgErr.Code == "57P01" ||
@@ -69,9 +73,8 @@ func storageError(err error) error {
 		}
 		return err
 	}
-	var connectErr *pgconn.ConnectError
 	var netErr net.Error
-	if errors.As(err, &connectErr) || errors.As(err, &netErr) ||
+	if errors.As(err, &netErr) ||
 		errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
 		return fmt.Errorf("%w: %w", domain.ErrStorageUnavailable, err)
 	}
