@@ -70,7 +70,7 @@ func cachedServer(t *testing.T, pool *pgxpool.Pool, cache shortener.LinkCache, l
 	t.Helper()
 	log := slog.New(slog.NewJSONHandler(logs, nil))
 	service := shortener.New(pgrepo.NewLinkRepository(pool), pgrepo.NewVisitRepository(pool), cache, shortener.GenerateCode, 150*time.Millisecond, log)
-	server := httptest.NewServer(httpdelivery.NewRouter(httpdelivery.NewHandler(service, "https://sho.rt", log)))
+	server := httptest.NewServer(httpdelivery.NewRouter(httpdelivery.NewHandler(service, nil, "https://sho.rt", log)))
 	t.Cleanup(server.Close)
 	server.Client().CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	server.Client().Timeout = 5 * time.Second

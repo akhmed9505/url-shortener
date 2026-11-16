@@ -10,6 +10,7 @@ func NewRouter(handler *Handler) http.Handler {
 	router := chi.NewRouter()
 	router.Use(withRequestID)
 	router.Post("/shorten", handler.Shorten)
+	router.Get("/analytics/{code}", handler.Analytics)
 	router.Get("/s/{code}", handler.Redirect)
 	router.NotFound(func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusNotFound, "not_found", "Route not found", "")

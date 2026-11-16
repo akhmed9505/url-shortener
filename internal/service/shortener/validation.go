@@ -7,16 +7,11 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/akhmed9505/url-shortener/internal/domain"
 )
 
-type ValidationError struct {
-	Field   string
-	Message string
-}
-
-func (e *ValidationError) Error() string {
-	return e.Field + ": " + e.Message
-}
+type ValidationError = domain.ValidationError
 
 func ValidateURL(raw string) error {
 	invalid := &ValidationError{Field: "url", Message: "URL must be an absolute HTTP or HTTPS address without credentials, spaces, control characters or backslashes"}
@@ -51,21 +46,8 @@ func ValidateURL(raw string) error {
 }
 
 func ValidateAlias(alias string) error {
-	if !validCode(alias) {
+	if !domain.ValidCode(alias) {
 		return &ValidationError{Field: "alias", Message: "Alias must contain 3 to 32 characters from A-Z, a-z, 0-9, underscore and hyphen"}
 	}
 	return nil
-}
-
-func validCode(code string) bool {
-	if len(code) < 3 || len(code) > 32 {
-		return false
-	}
-	for _, char := range code {
-		if !(char >= 'A' && char <= 'Z' || char >= 'a' && char <= 'z' ||
-			char >= '0' && char <= '9' || char == '_' || char == '-') {
-			return false
-		}
-	}
-	return true
 }

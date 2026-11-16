@@ -32,7 +32,7 @@ func (s *visitStub) Record(ctx context.Context, visit domain.Visit) error {
 func redirectRouter(repository *repositoryStub, visits *visitStub, timeout time.Duration) http.Handler {
 	log := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	service := shortener.New(repository, visits, missingCache{}, shortener.GenerateCode, timeout, log)
-	return NewRouter(NewHandler(service, "https://sho.rt", log))
+	return NewRouter(NewHandler(service, nil, "https://sho.rt", log))
 }
 
 func TestRedirect(t *testing.T) {

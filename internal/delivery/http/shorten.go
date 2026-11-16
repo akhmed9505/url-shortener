@@ -14,17 +14,19 @@ import (
 
 	"github.com/akhmed9505/url-shortener/internal/config"
 	"github.com/akhmed9505/url-shortener/internal/domain"
+	"github.com/akhmed9505/url-shortener/internal/service/analytics"
 	"github.com/akhmed9505/url-shortener/internal/service/shortener"
 )
 
 type Handler struct {
+	analytics *analytics.Service
 	shortener *shortener.Service
 	baseURL   string
 	log       *slog.Logger
 }
 
-func NewHandler(service *shortener.Service, baseURL string, log *slog.Logger) *Handler {
-	return &Handler{shortener: service, baseURL: baseURL, log: log}
+func NewHandler(service *shortener.Service, analyticsService *analytics.Service, baseURL string, log *slog.Logger) *Handler {
+	return &Handler{analytics: analyticsService, shortener: service, baseURL: baseURL, log: log}
 }
 
 type ShortenRequest struct {
@@ -126,7 +128,7 @@ func (h *Handler) operationError(w http.ResponseWriter, r *http.Request, err err
 	if r.Context().Err() != nil {
 		return
 	}
-	var validation *shortener.ValidationError
+	var validation *domain.ValidationError
 	switch {
 	case errors.As(err, &validation):
 		writeError(w, r, http.StatusBadRequest, "invalid_"+validation.Field, validation.Message, validation.Field)

@@ -15,6 +15,7 @@ import (
 	redisinfra "github.com/akhmed9505/url-shortener/internal/infra/redis"
 	pgrepo "github.com/akhmed9505/url-shortener/internal/repository/postgres"
 	rediscache "github.com/akhmed9505/url-shortener/internal/repository/redis"
+	"github.com/akhmed9505/url-shortener/internal/service/analytics"
 	"github.com/akhmed9505/url-shortener/internal/service/shortener"
 )
 
@@ -52,7 +53,8 @@ func (a *App) Run(ctx context.Context) error {
 	repository := pgrepo.NewLinkRepository(pool)
 	visits := pgrepo.NewVisitRepository(pool)
 	service := shortener.New(repository, visits, cache, shortener.GenerateCode, a.cfg.AnalyticsWriteTimeout, a.log)
-	handler := httpdelivery.NewHandler(service, a.cfg.PublicBaseURL, a.log)
+	analyticsService := analytics.New(pgrepo.NewAnalyticsRepository(pool))
+	handler := httpdelivery.NewHandler(service, analyticsService, a.cfg.PublicBaseURL, a.log)
 	server := httpdelivery.NewServer(a.cfg.HTTP, httpdelivery.NewRouter(handler), a.log)
 	serverErrors := make(chan error, 1)
 	go func() {
