@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -94,10 +95,11 @@ func TestShortenHTTPConcurrentAlias(t *testing.T) {
 		err    error
 	}
 	results := make(chan result, workers)
-	for range workers {
+	for i := range workers {
+		client := clientFromIP(t, net.IPv4(127, 0, 0, byte(i+2)))
 		go func() {
 			<-start
-			response, err := server.Client().Post(server.URL+"/shorten", "application/json", strings.NewReader(`{"url":"https://example.org","alias":"shared"}`))
+			response, err := client.Post(server.URL+"/shorten", "application/json", strings.NewReader(`{"url":"https://example.org","alias":"shared"}`))
 			if err != nil {
 				results <- result{err: err}
 				return

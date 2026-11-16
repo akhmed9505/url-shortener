@@ -2,16 +2,21 @@ package http
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 )
 
 func NewRouter(handler *Handler) http.Handler {
+	return newRouter(handler, newRateLimits(time.Now))
+}
+
+func newRouter(handler *Handler, limits *rateLimits) http.Handler {
 	router := chi.NewRouter()
 	router.Use(withRequestID)
-	router.Post("/shorten", handler.Shorten)
-	router.Get("/analytics/{code}", handler.Analytics)
-	router.Get("/analytics/{code}/visits", handler.Visits)
+	router.With(limits.middleware(creationBucket)).Post("/shorten", handler.Shorten)
+	router.With(limits.middleware(analyticsBucket)).Get("/analytics/{code}", handler.Analytics)
+	router.With(limits.middleware(analyticsBucket)).Get("/analytics/{code}/visits", handler.Visits)
 	router.Get("/s/{code}", handler.Redirect)
 	router.NotFound(func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusNotFound, "not_found", "Route not found", "")
