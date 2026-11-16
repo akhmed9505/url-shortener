@@ -10,17 +10,20 @@ import (
 
 	"github.com/akhmed9505/url-shortener/internal/config"
 	httpdelivery "github.com/akhmed9505/url-shortener/internal/delivery/http"
+	"github.com/akhmed9505/url-shortener/internal/infra/postgres"
 )
 
 type App struct {
-	server *http.Server
-	log    *slog.Logger
+	server   *http.Server
+	log      *slog.Logger
+	postgres config.Postgres
 }
 
 func New(cfg config.Config, log *slog.Logger) *App {
 	return &App{
-		server: httpdelivery.NewServer(cfg.HTTP, httpdelivery.NewRouter(), log),
-		log:    log,
+		server:   httpdelivery.NewServer(cfg.HTTP, httpdelivery.NewRouter(), log),
+		log:      log,
+		postgres: cfg.Postgres,
 	}
 }
 
@@ -28,6 +31,12 @@ func (a *App) Run(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	pool, err := postgres.NewPool(ctx, a.postgres)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	a.log.Info("PostgreSQL pool connected")
 	serverErrors := make(chan error, 1)
 	go func() {
 		a.log.Info("starting HTTP server", "addr", a.server.Addr)

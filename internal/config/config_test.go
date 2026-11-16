@@ -13,6 +13,7 @@ func clearEnvironment(t *testing.T) {
 	for _, key := range []string{
 		"HTTP_ADDR", "LOG_LEVEL", "HTTP_READ_HEADER_TIMEOUT",
 		"HTTP_READ_TIMEOUT", "HTTP_WRITE_TIMEOUT", "HTTP_IDLE_TIMEOUT",
+		"POSTGRES_DSN", "POSTGRES_MAX_CONNS", "POSTGRES_MIN_CONNS", "POSTGRES_CONNECT_TIMEOUT",
 	} {
 		t.Setenv(key, "")
 		if err := os.Unsetenv(key); err != nil {
@@ -33,7 +34,10 @@ func TestLoadDefaults(t *testing.T) {
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,
 		IdleTimeout:       60 * time.Second,
-	}, LogLevel: slog.LevelInfo}
+	}, LogLevel: slog.LevelInfo, Postgres: Postgres{
+		DSN:      "postgres://shortener:shortener@localhost:5432/shortener?sslmode=disable",
+		MaxConns: 10, MinConns: 0, ConnectTimeout: 5 * time.Second,
+	}}
 	if got != want {
 		t.Fatalf("Load() = %+v, want %+v", got, want)
 	}
@@ -48,6 +52,10 @@ func TestLoadOverrides(t *testing.T) {
 		"HTTP_READ_TIMEOUT":        "2s",
 		"HTTP_WRITE_TIMEOUT":       "3s",
 		"HTTP_IDLE_TIMEOUT":        "1m30s",
+		"POSTGRES_DSN":             "postgres://test:test@localhost:5433/test?sslmode=disable",
+		"POSTGRES_MAX_CONNS":       "20",
+		"POSTGRES_MIN_CONNS":       "2",
+		"POSTGRES_CONNECT_TIMEOUT": "2s",
 	} {
 		t.Setenv(key, value)
 	}
@@ -61,7 +69,10 @@ func TestLoadOverrides(t *testing.T) {
 		ReadTimeout:       2 * time.Second,
 		WriteTimeout:      3 * time.Second,
 		IdleTimeout:       90 * time.Second,
-	}, LogLevel: slog.LevelDebug}
+	}, LogLevel: slog.LevelDebug, Postgres: Postgres{
+		DSN:      "postgres://test:test@localhost:5433/test?sslmode=disable",
+		MaxConns: 20, MinConns: 2, ConnectTimeout: 2 * time.Second,
+	}}
 	if got != want {
 		t.Fatalf("Load() = %+v, want %+v", got, want)
 	}
@@ -94,7 +105,7 @@ func TestLoadRejectsInvalidLogLevel(t *testing.T) {
 }
 
 func TestLoadRejectsInvalidTimeouts(t *testing.T) {
-	for _, key := range []string{"HTTP_READ_HEADER_TIMEOUT", "HTTP_READ_TIMEOUT", "HTTP_WRITE_TIMEOUT", "HTTP_IDLE_TIMEOUT"} {
+	for _, key := range []string{"HTTP_READ_HEADER_TIMEOUT", "HTTP_READ_TIMEOUT", "HTTP_WRITE_TIMEOUT", "HTTP_IDLE_TIMEOUT", "POSTGRES_CONNECT_TIMEOUT"} {
 		for _, value := range []string{"", "0s", "-1s", "10", "invalid", "999999999999999999999h"} {
 			t.Run(key+"/"+value, func(t *testing.T) {
 				clearEnvironment(t)
@@ -113,5 +124,30 @@ func TestLoadRejectsHeaderTimeoutExceedingReadTimeout(t *testing.T) {
 	t.Setenv("HTTP_READ_HEADER_TIMEOUT", "11s")
 	if _, err := Load(); err == nil {
 		t.Fatal("Load() accepted a header timeout exceeding the read timeout")
+	}
+}
+
+func TestLoadRejectsInvalidPostgresConfiguration(t *testing.T) {
+	for _, tc := range []struct{ key, value string }{
+		{"POSTGRES_DSN", ""},
+		{"POSTGRES_DSN", "postgres://user:secret@host:invalid/db"},
+		{"POSTGRES_MAX_CONNS", "0"},
+		{"POSTGRES_MAX_CONNS", "-1"},
+		{"POSTGRES_MAX_CONNS", "2147483648"},
+		{"POSTGRES_MIN_CONNS", "-1"},
+		{"POSTGRES_MIN_CONNS", "11"},
+		{"POSTGRES_MIN_CONNS", "invalid"},
+	} {
+		t.Run(tc.key+"/"+tc.value, func(t *testing.T) {
+			clearEnvironment(t)
+			t.Setenv(tc.key, tc.value)
+			_, err := Load()
+			if err == nil {
+				t.Fatal("expected validation error")
+			}
+			if strings.Contains(err.Error(), "secret") {
+				t.Fatal("validation error exposes DSN credentials")
+			}
+		})
 	}
 }

@@ -7,11 +7,21 @@ import (
 	"os"
 	"strconv"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 type Config struct {
 	HTTP     HTTP
 	LogLevel slog.Level
+	Postgres Postgres
+}
+
+type Postgres struct {
+	DSN            string
+	MaxConns       int32
+	MinConns       int32
+	ConnectTimeout time.Duration
 }
 
 type HTTP struct {
@@ -29,7 +39,40 @@ func Load() (Config, error) {
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,
 		IdleTimeout:       60 * time.Second,
-	}, LogLevel: slog.LevelInfo}
+	}, LogLevel: slog.LevelInfo, Postgres: Postgres{
+		DSN:            "postgres://shortener:shortener@localhost:5432/shortener?sslmode=disable",
+		MaxConns:       10,
+		MinConns:       0,
+		ConnectTimeout: 5 * time.Second,
+	}}
+
+	if dsn, ok := os.LookupEnv("POSTGRES_DSN"); ok {
+		cfg.Postgres.DSN = dsn
+	}
+	if cfg.Postgres.DSN == "" {
+		return Config{}, fmt.Errorf("POSTGRES_DSN must not be empty")
+	}
+	if _, err := pgx.ParseConfig(cfg.Postgres.DSN); err != nil {
+		return Config{}, fmt.Errorf("POSTGRES_DSN must be a valid PostgreSQL connection string")
+	}
+	for _, setting := range []struct {
+		name  string
+		value *int32
+	}{
+		{"POSTGRES_MAX_CONNS", &cfg.Postgres.MaxConns},
+		{"POSTGRES_MIN_CONNS", &cfg.Postgres.MinConns},
+	} {
+		if raw, ok := os.LookupEnv(setting.name); ok {
+			value, err := strconv.ParseInt(raw, 10, 32)
+			if err != nil || value < 0 {
+				return Config{}, fmt.Errorf("%s must be a non-negative int32", setting.name)
+			}
+			*setting.value = int32(value)
+		}
+	}
+	if cfg.Postgres.MaxConns == 0 || cfg.Postgres.MinConns > cfg.Postgres.MaxConns {
+		return Config{}, fmt.Errorf("PostgreSQL pool requires 0 <= POSTGRES_MIN_CONNS <= POSTGRES_MAX_CONNS and POSTGRES_MAX_CONNS > 0")
+	}
 
 	if addr, ok := os.LookupEnv("HTTP_ADDR"); ok {
 		cfg.HTTP.Addr = addr
@@ -57,6 +100,7 @@ func Load() (Config, error) {
 		{"HTTP_READ_TIMEOUT", &cfg.HTTP.ReadTimeout},
 		{"HTTP_WRITE_TIMEOUT", &cfg.HTTP.WriteTimeout},
 		{"HTTP_IDLE_TIMEOUT", &cfg.HTTP.IdleTimeout},
+		{"POSTGRES_CONNECT_TIMEOUT", &cfg.Postgres.ConnectTimeout},
 	} {
 		if raw, ok := os.LookupEnv(setting.name); ok {
 			duration, err := time.ParseDuration(raw)
