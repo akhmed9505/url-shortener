@@ -38,16 +38,12 @@ type UserAgentVisitsResponse struct {
 func (h *Handler) Analytics(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 	defer cancel()
-	query, err := url.ParseQuery(r.URL.RawQuery)
+	query, err := analyticsQuery(r.URL.RawQuery)
 	if err != nil {
-		h.operationError(w, r, &domain.ValidationError{Field: "period", Message: "Invalid query parameters"})
+		h.operationError(w, r, err)
 		return
 	}
-	from, to := query["from"], query["to"]
-	if len(from) > 1 || len(to) > 1 || (len(from) == 1 && from[0] == "") || (len(to) == 1 && to[0] == "") {
-		h.operationError(w, r, &domain.ValidationError{Field: "period", Message: "from and to must each contain one non-empty date"})
-		return
-	}
+
 	summary, err := h.analytics.Summary(ctx, chi.URLParam(r, "code"), query.Get("from"), query.Get("to"), time.Now())
 	if err != nil {
 		h.operationError(w, r, err)
@@ -69,4 +65,16 @@ func (h *Handler) Analytics(w http.ResponseWriter, r *http.Request) {
 		response.UserAgents = append(response.UserAgents, UserAgentVisitsResponse{UserAgent: agent.UserAgent, Count: agent.Count})
 	}
 	writeJSON(w, http.StatusOK, response)
+}
+
+func analyticsQuery(raw string) (url.Values, error) {
+	query, err := url.ParseQuery(raw)
+	if err != nil {
+		return nil, &domain.ValidationError{Field: "period", Message: "Invalid query parameters"}
+	}
+	from, to := query["from"], query["to"]
+	if len(from) > 1 || len(to) > 1 || (len(from) == 1 && from[0] == "") || (len(to) == 1 && to[0] == "") {
+		return nil, &domain.ValidationError{Field: "period", Message: "from and to must each contain one non-empty date"}
+	}
+	return query, nil
 }

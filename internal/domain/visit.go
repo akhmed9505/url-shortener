@@ -8,3 +8,9 @@ type Visit struct {
 	VisitedAt time.Time
 	UserAgent string
 }
+
+// VisitPosition is the exclusive boundary for descending keyset pagination.
+type VisitPosition struct {
+	VisitedAt time.Time
+	ID        int64
+}

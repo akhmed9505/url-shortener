@@ -11,6 +11,7 @@ func NewRouter(handler *Handler) http.Handler {
 	router.Use(withRequestID)
 	router.Post("/shorten", handler.Shorten)
 	router.Get("/analytics/{code}", handler.Analytics)
+	router.Get("/analytics/{code}/visits", handler.Visits)
 	router.Get("/s/{code}", handler.Redirect)
 	router.NotFound(func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusNotFound, "not_found", "Route not found", "")

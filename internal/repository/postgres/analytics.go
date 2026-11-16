@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/akhmed9505/url-shortener/internal/domain"
 	"github.com/jackc/pgx/v5"
@@ -29,7 +30,11 @@ func (r *AnalyticsRepository) summary(ctx context.Context, code string, period d
 	if err != nil {
 		return domain.Analytics{}, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_ = tx.Rollback(cleanupCtx)
+	}()
 	result := domain.Analytics{Period: period}
 	var linkID int64
 	err = tx.QueryRow(ctx, `SELECT id, code, original_url FROM links WHERE code=$1`, code).Scan(&linkID, &result.Code, &result.URL)

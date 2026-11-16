@@ -73,3 +73,9 @@ func TestSummaryErrors(t *testing.T) {
 		t.Fatalf("err=%v", err)
 	}
 }
+
+func (r *repositoryStub) ListVisits(_ context.Context, _ string, period domain.AnalyticsPeriod, _ *domain.VisitPosition, _ int) ([]domain.Visit, error) {
+	r.calls++
+	r.period = period
+	return nil, r.err
+}

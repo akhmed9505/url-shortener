@@ -9,6 +9,7 @@ import (
 
 type Repository interface {
 	Summary(context.Context, string, domain.AnalyticsPeriod) (domain.Analytics, error)
+	ListVisits(context.Context, string, domain.AnalyticsPeriod, *domain.VisitPosition, int) ([]domain.Visit, error)
 }
 
 type Service struct{ repository Repository }

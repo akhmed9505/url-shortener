@@ -71,3 +71,10 @@ func TestAnalyticsHTTP(t *testing.T) {
 		})
 	}
 }
+
+func (s *analyticsStub) ListVisits(ctx context.Context, _ string, _ domain.AnalyticsPeriod, _ *domain.VisitPosition, _ int) ([]domain.Visit, error) {
+	s.calls++
+	deadline, _ := ctx.Deadline()
+	s.timeout = time.Until(deadline)
+	return nil, s.err
+}
