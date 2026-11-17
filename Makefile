@@ -1,4 +1,4 @@
-.PHONY: run build test race vet fmt fmt-check check tidy postgres-up postgres-down postgres-test-up postgres-test-down redis-up redis-down redis-test-up redis-test-down deps-up deps-down test-deps-up test-deps-down migrate-up migrate-down migrate-status test-integration
+.PHONY: run build build-goose test race vet fmt fmt-check check tidy postgres-up postgres-down postgres-test-up postgres-test-down redis-up redis-down redis-test-up redis-test-down deps-up deps-down test-deps-up test-deps-down migrate-up migrate-down migrate-status test-integration
 
 GOOSE_VERSION := v3.30.1
 GOOSE_TAGS := no_clickhouse,no_libsql,no_mssql,no_mysql,no_sqlite3,no_vertica,no_ydb
@@ -10,6 +10,9 @@ run:
 
 build:
 	go build -o bin/shortener ./cmd/shortener
+
+build-goose:
+	GOBIN="$(CURDIR)/bin" go install -tags='$(GOOSE_TAGS)' github.com/pressly/goose/v3/cmd/goose@$(GOOSE_VERSION)
 
 test:
 	go test ./...
