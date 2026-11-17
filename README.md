@@ -58,6 +58,8 @@ tests/integration/          интеграционные тесты
 ```sh
 git clone https://github.com/akhmed9505/url-shortener.git
 cd url-shortener
+cp .env.example .env
+# Заполните PGUSER, PGPASSWORD и PGDATABASE в .env.
 make docker-up
 ```
 
@@ -75,13 +77,16 @@ make docker-up
 
 ## Конфигурация
 
-Параметры и значения по умолчанию приведены в [.env.example](.env.example). Для переопределения скопируйте его в `.env`. Команды `run` и `test-integration` загружают этот файл в shell-совместимом формате, значения из файла имеют приоритет над окружением процесса. Compose читает `.env` автоматически.
+Параметры приведены в [.env.example](.env.example). Перед запуском создайте `.env` и заполните `PGUSER`, `PGPASSWORD` и `PGDATABASE`. Compose требует этот файл и сообщает об отсутствующих параметрах.
 
-- `APP_PORT` задаёт порт приложения на хосте в Compose, внутри контейнера используется `8080`. Для локального запуска адрес задаётся через `HTTP_ADDR`.
-- `PUBLIC_BASE_URL` задаёт HTTP/HTTPS-адрес коротких ссылок без пути, логина, пароля, параметров и фрагмента. При отсутствии явного значения Compose формирует его из `APP_PORT`. Если значение указано в `.env`, обновляйте его вместе с портом.
-- `POSTGRES_PORT` и `REDIS_PORT` задают порты зависимостей на хосте. Для локального приложения соответствующие адреса задаются через `POSTGRES_DSN` и `REDIS_ADDR`.
+- `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE`, `PGSSLMODE` обязательны для Go-приложения. В Compose адрес БД заменяется на `postgres:5432`. Приложение, PostgreSQL и Goose используют одни учётные данные.
+- `APP_PORT` задаёт порт приложения на хосте, внутри контейнера используется `8080`. Для локального запуска адрес задаётся через `HTTP_ADDR`.
+- `PUBLIC_BASE_URL` задаёт HTTP/HTTPS-адрес коротких ссылок без пути, логина, пароля, параметров и фрагмента. Если он указан в `.env`, обновляйте его вместе с `APP_PORT`.
+- `POSTGRES_PORT` и `REDIS_PORT` задают опубликованные порты зависимостей. Для локального Go-приложения согласуйте с ними `PGPORT` и `REDIS_ADDR`. В Compose Redis доступен по `redis:6379`.
 
-Пример запуска на других портах
+Для существующего тома используйте действующие учётные данные. Изменение `.env` не обновляет пароль существующей роли PostgreSQL.
+
+Пример запуска на других портах:
 
 ```sh
 APP_PORT=8081 PUBLIC_BASE_URL=http://localhost:8081 \
@@ -110,7 +115,7 @@ curl -i http://localhost:8080/shorten \
 curl -i http://localhost:8080/s/demo-link
 ```
 
-Ответ `302 Found`, `Location` с исходным URL и `Cache-Control: no-store`. HEAD возвращает `405` и не регистрирует переход. Таймаут операции — 2 секунды.
+Ответ `302 Found`, `Location` с исходным URL и `Cache-Control: no-store`. HEAD возвращает `405` и не регистрирует переход.
 
 ### Сводная аналитика
 
@@ -128,8 +133,6 @@ curl 'http://localhost:8080/analytics/demo-link?from=2026-11-01&to=2026-12-01'
 - `daily`, `monthly` — количество переходов по дням и месяцам, включая нулевые значения.
 - `user_agents` — 20 самых частых User-Agent, `other_user_agents_visits` — сумма остальных.
 
-Таймаут — 3 секунды.
-
 ### История переходов
 
 ```sh
@@ -144,7 +147,7 @@ curl 'http://localhost:8080/analytics/demo-link/visits?from=2026-11-01&to=2026-1
 
 `limit` по умолчанию 20, максимум 100. Сортировка — `(visited_at DESC, id DESC)`.
 
-Для следующей страницы подставьте полученный `next_cursor`, сохранив код и период
+Для следующей страницы подставьте полученный `next_cursor`, сохранив код и период:
 
 ```sh
 curl --get http://localhost:8080/analytics/demo-link/visits \
@@ -154,7 +157,7 @@ curl --get http://localhost:8080/analytics/demo-link/visits \
   --data-urlencode 'cursor=CURSOR_FROM_PREVIOUS_RESPONSE'
 ```
 
-При передаче курсора обе даты обязательны. Некорректный курсор возвращает `400 invalid_cursor`. Таймаут — 3 секунды.
+При передаче курсора обе даты обязательны. Некорректный курсор возвращает `400 invalid_cursor`.
 
 ### Проверки состояния
 
@@ -167,7 +170,7 @@ curl http://localhost:8080/health/ready
 
 ### Ошибки и ограничения
 
-Единый формат ошибки
+Единый формат ошибки:
 
 ```json
 {
@@ -201,7 +204,7 @@ make check
 make test-integration
 ```
 
-`test-integration` запускает PostgreSQL и Redis в отдельном Compose-проекте `shortener-test` на портах 55432/56379 и удаляет тестовые контейнеры после завершения. Каждый тест создаёт и удаляет собственную БД PostgreSQL. Пользователю БД требуется право CREATEDB. Адреса подключений можно задать через `TEST_POSTGRES_DSN` и `TEST_REDIS_ADDR`.
+`test-integration` запускает PostgreSQL и Redis через `docker-compose.test.yml` в проекте `shortener-test` на портах 55432/56379. Используются тестовые реквизиты, локальный `.env` не загружается. Контейнеры удаляются после завершения. Каждый тест создаёт собственную БД и удаляет её, требуется право CREATEDB. Адреса можно переопределить через `TEST_POSTGRES_DSN` и `TEST_REDIS_ADDR`.
 
 ## Кеширование и аналитика
 

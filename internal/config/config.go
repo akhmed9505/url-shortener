@@ -55,7 +55,6 @@ func Load() (Config, error) {
 		WriteTimeout:      10 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}, LogLevel: slog.LevelInfo, Postgres: Postgres{
-		DSN:            "postgres://shortener:shortener@localhost:5432/shortener?sslmode=disable",
 		MaxConns:       10,
 		MinConns:       0,
 		ConnectTimeout: 5 * time.Second,
@@ -85,15 +84,30 @@ func Load() (Config, error) {
 	}
 	cfg.PublicBaseURL = strings.TrimSuffix(base.String(), "/")
 
-	if dsn, ok := os.LookupEnv("POSTGRES_DSN"); ok {
-		cfg.Postgres.DSN = dsn
+	if os.Getenv("POSTGRES_DSN") != "" {
+		return Config{}, fmt.Errorf("POSTGRES_DSN is unsupported; configure PGHOST, PGPORT, PGUSER, PGPASSWORD, PGDATABASE and PGSSLMODE")
 	}
-	if cfg.Postgres.DSN == "" {
-		return Config{}, fmt.Errorf("POSTGRES_DSN must not be empty")
+	for _, name := range []string{"PGHOST", "PGPORT", "PGUSER", "PGPASSWORD", "PGDATABASE", "PGSSLMODE"} {
+		if os.Getenv(name) == "" {
+			return Config{}, fmt.Errorf("%s is required", name)
+		}
 	}
+	portValue, portErr := strconv.Atoi(os.Getenv("PGPORT"))
+	if portErr != nil || portValue < 1 || portValue > 65535 {
+		return Config{}, fmt.Errorf("PGPORT must be between 1 and 65535")
+	}
+	databaseURL := &url.URL{
+		Scheme: "postgres",
+		Host:   net.JoinHostPort(os.Getenv("PGHOST"), os.Getenv("PGPORT")),
+		Path:   "/" + os.Getenv("PGDATABASE"),
+		User:   url.UserPassword(os.Getenv("PGUSER"), os.Getenv("PGPASSWORD")),
+	}
+	databaseURL.RawQuery = url.Values{"sslmode": {os.Getenv("PGSSLMODE")}}.Encode()
+	cfg.Postgres.DSN = databaseURL.String()
 	if _, err := pgx.ParseConfig(cfg.Postgres.DSN); err != nil {
-		return Config{}, fmt.Errorf("POSTGRES_DSN must be a valid PostgreSQL connection string")
+		return Config{}, fmt.Errorf("invalid PostgreSQL environment configuration")
 	}
+
 	for _, setting := range []struct {
 		name  string
 		value *int32
