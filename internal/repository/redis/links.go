@@ -1,3 +1,4 @@
+// Package redis implements the link cache.
 package redis
 
 import (
@@ -17,6 +18,7 @@ import (
 
 const keyPrefix = "shortener:link:v1:"
 
+// LinkCache caches stored links by short code.
 type LinkCache struct {
 	client *redis.Client
 	ttl    time.Duration
@@ -27,10 +29,12 @@ type cachedLink struct {
 	URL string `json:"url"`
 }
 
+// NewLinkCache creates a Redis link cache with the specified TTL.
 func NewLinkCache(client *redis.Client, ttl time.Duration) *LinkCache {
 	return &LinkCache{client: client, ttl: ttl}
 }
 
+// Get returns a cached link and reports whether it was found.
 func (c *LinkCache) Get(ctx context.Context, code string) (domain.Link, bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, config.RedisOperationTimeout)
 	defer cancel()
@@ -66,6 +70,7 @@ func decodeLink(data []byte) (cachedLink, error) {
 	return payload, nil
 }
 
+// Set caches a link until its TTL expires.
 func (c *LinkCache) Set(ctx context.Context, link domain.Link) error {
 	ctx, cancel := context.WithTimeout(ctx, config.RedisOperationTimeout)
 	defer cancel()

@@ -1,3 +1,4 @@
+// Package config loads and validates environment settings.
 package config
 
 import (
@@ -15,8 +16,10 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+// HTTPRequestTimeout bounds link creation and redirect operations.
 const HTTPRequestTimeout = 2 * time.Second
 
+// Config holds validated application settings.
 type Config struct {
 	HTTP                  HTTP
 	LogLevel              slog.Level
@@ -26,6 +29,7 @@ type Config struct {
 	Redis                 Redis
 }
 
+// Postgres holds PostgreSQL connection and pool settings.
 type Postgres struct {
 	DSN            string
 	MaxConns       int32
@@ -33,6 +37,7 @@ type Postgres struct {
 	ConnectTimeout time.Duration
 }
 
+// HTTP holds HTTP listener and timeout settings.
 type HTTP struct {
 	Addr              string
 	ReadHeaderTimeout time.Duration
@@ -41,6 +46,7 @@ type HTTP struct {
 	IdleTimeout       time.Duration
 }
 
+// Load loads environment variables and validates application settings.
 func Load() (Config, error) {
 	cfg := Config{HTTP: HTTP{
 		Addr:              ":8080",

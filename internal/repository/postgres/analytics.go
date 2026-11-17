@@ -1,3 +1,4 @@
+// Package postgres stores links and visits and reads analytics.
 package postgres
 
 import (
@@ -11,12 +12,15 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// AnalyticsRepository reads PostgreSQL visit aggregates and pages.
 type AnalyticsRepository struct{ pool *pgxpool.Pool }
 
+// NewAnalyticsRepository creates a PostgreSQL analytics repository.
 func NewAnalyticsRepository(pool *pgxpool.Pool) *AnalyticsRepository {
 	return &AnalyticsRepository{pool: pool}
 }
 
+// Summary returns consistent aggregate visit counts for the selected period.
 func (r *AnalyticsRepository) Summary(ctx context.Context, code string, period domain.AnalyticsPeriod) (domain.Analytics, error) {
 	result, err := r.summary(ctx, code, period)
 	if err != nil {

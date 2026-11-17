@@ -2,6 +2,7 @@ package domain
 
 import "time"
 
+// Visit records a link visit with its UTC time and normalized User-Agent.
 type Visit struct {
 	ID        int64
 	LinkID    int64

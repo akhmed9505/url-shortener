@@ -8,8 +8,10 @@ import (
 	"time"
 )
 
+// RedisOperationTimeout bounds each Redis operation.
 const RedisOperationTimeout = 50 * time.Millisecond
 
+// Redis holds Redis connection and cache settings.
 type Redis struct {
 	Addr     string
 	Username string

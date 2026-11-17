@@ -1,3 +1,4 @@
+// Package analytics validates periods and cursors and reads visit statistics.
 package analytics
 
 import (

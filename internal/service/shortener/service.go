@@ -10,22 +10,10 @@ import (
 	"github.com/akhmed9505/url-shortener/internal/domain"
 )
 
+// ErrCodeGenerationExhausted reports that all random code generation attempts collided.
 var ErrCodeGenerationExhausted = errors.New("short code generation attempts exhausted")
 
-type LinkRepository interface {
-	Create(ctx context.Context, code, originalURL string) (domain.Link, error)
-	FindByCode(ctx context.Context, code string) (domain.Link, error)
-}
-
-type VisitRepository interface {
-	Record(ctx context.Context, visit domain.Visit) error
-}
-
-type LinkCache interface {
-	Get(ctx context.Context, code string) (domain.Link, bool, error)
-	Set(ctx context.Context, link domain.Link) error
-}
-
+// Service implements link creation and resolution.
 type Service struct {
 	repository   LinkRepository
 	visits       VisitRepository
@@ -35,6 +23,7 @@ type Service struct {
 	log          *slog.Logger
 }
 
+// New creates a link service with explicit storage, cache and generator dependencies.
 func New(repository LinkRepository, visits VisitRepository, cache LinkCache, generate func() (string, error), writeTimeout time.Duration, log *slog.Logger) *Service {
 	return &Service{
 		repository:   repository,
@@ -46,6 +35,7 @@ func New(repository LinkRepository, visits VisitRepository, cache LinkCache, gen
 	}
 }
 
+// Create stores a link with a custom alias or generated code.
 func (s *Service) Create(ctx context.Context, originalURL string, alias *string) (domain.Link, error) {
 	if err := ctx.Err(); err != nil {
 		return domain.Link{}, err

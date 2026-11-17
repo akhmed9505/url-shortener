@@ -1,3 +1,4 @@
+// Package redis configures the Redis client.
 package redis
 
 import (
@@ -5,6 +6,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+// NewClient creates a Redis client with bounded operations and retries disabled.
 func NewClient(cfg config.Redis) *redis.Client {
 	return redis.NewClient(&redis.Options{
 		Addr:       cfg.Addr,

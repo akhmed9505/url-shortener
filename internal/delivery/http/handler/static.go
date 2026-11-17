@@ -1,4 +1,4 @@
-package http
+package handler
 
 import (
 	"net/http"
@@ -6,8 +6,8 @@ import (
 	"github.com/akhmed9505/url-shortener/web"
 )
 
-// serveStatic uses an explicit file name so unknown paths never fall back to HTML.
-func serveStatic(name, contentType string) http.HandlerFunc {
+// Static uses an explicit file name so unknown paths never fall back to HTML.
+func Static(name, contentType string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", contentType)
 		w.Header().Set("Cache-Control", "no-cache")

@@ -17,6 +17,9 @@ import (
 	"time"
 
 	httpdelivery "github.com/akhmed9505/url-shortener/internal/delivery/http"
+	httphandler "github.com/akhmed9505/url-shortener/internal/delivery/http/handler"
+	"github.com/akhmed9505/url-shortener/internal/delivery/http/middleware"
+	httpresponse "github.com/akhmed9505/url-shortener/internal/delivery/http/response"
 	"github.com/akhmed9505/url-shortener/internal/domain"
 	pgrepo "github.com/akhmed9505/url-shortener/internal/repository/postgres"
 	"github.com/akhmed9505/url-shortener/internal/service/shortener"
@@ -27,8 +30,8 @@ func newShortenServer(t *testing.T, pool *pgxpool.Pool, generate func() (string,
 	t.Helper()
 	log := slog.New(slog.NewJSONHandler(logs, nil))
 	service := shortener.New(pgrepo.NewLinkRepository(pool), pgrepo.NewVisitRepository(pool), missingCache{}, generate, 150*time.Millisecond, log)
-	handler := httpdelivery.NewHandler(service, nil, pool.Ping, "https://sho.rt", log)
-	server := httptest.NewServer(httpdelivery.NewRouter(handler))
+	handler := httphandler.NewHandler(service, nil, pool.Ping, "https://sho.rt", log)
+	server := httptest.NewServer(httpdelivery.NewRouter(handler, log, middleware.NewRateLimits(time.Now)))
 	t.Cleanup(server.Close)
 	return server
 }
@@ -64,7 +67,7 @@ func TestShortenHTTPPersistsLinks(t *testing.T) {
 		if status != http.StatusCreated {
 			t.Fatalf("status=%d body=%s", status, data)
 		}
-		var body httpdelivery.ShortenResponse
+		var body httphandler.ShortenResponse
 		if err := json.Unmarshal(data, &body); err != nil {
 			t.Fatal(err)
 		}
@@ -162,7 +165,7 @@ func TestShortenHTTPForcedCollisionsAndExhaustion(t *testing.T) {
 		return "Taken123", nil
 	}, io.Discard)
 	status, _, data = postShorten(t, server, `{"url":"https://example.org/exhausted"}`)
-	var body httpdelivery.ErrorResponse
+	var body httpresponse.ErrorResponse
 	if err := json.Unmarshal(data, &body); err != nil {
 		t.Fatal(err)
 	}

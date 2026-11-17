@@ -1,4 +1,4 @@
-package http
+package handler_test
 
 import (
 	"context"
@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	. "github.com/akhmed9505/url-shortener/internal/delivery/http/handler"
+	. "github.com/akhmed9505/url-shortener/internal/delivery/http/response"
 	"github.com/akhmed9505/url-shortener/internal/domain"
 	"github.com/akhmed9505/url-shortener/internal/service/analytics"
 )
@@ -42,7 +44,7 @@ func TestAnalyticsHTTP(t *testing.T) {
 		t.Run(tc.query+tc.errorCode, func(t *testing.T) {
 			stub := &analyticsStub{err: tc.err}
 			handler := testHandler(&repositoryStub{})
-			handler.analytics = analytics.New(stub)
+			handler = NewHandler(nil, analytics.New(stub), nil, "https://sho.rt", testLogger())
 			response := httptest.NewRecorder()
 			NewRouter(handler).ServeHTTP(response, httptest.NewRequest("GET", "/analytics/abc"+tc.query, nil))
 			if strings.Contains(response.Body.String(), "private database details") {

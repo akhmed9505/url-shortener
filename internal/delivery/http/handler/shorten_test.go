@@ -1,4 +1,4 @@
-package http
+package handler_test
 
 import (
 	"bytes"
@@ -13,7 +13,10 @@ import (
 	"testing"
 	"time"
 
+	. "github.com/akhmed9505/url-shortener/internal/delivery/http/handler"
+	. "github.com/akhmed9505/url-shortener/internal/delivery/http/response"
 	"github.com/akhmed9505/url-shortener/internal/domain"
+	"github.com/akhmed9505/url-shortener/internal/service/analytics"
 	"github.com/akhmed9505/url-shortener/internal/service/shortener"
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -29,10 +32,13 @@ func (r *repositoryStub) Create(_ context.Context, code, raw string) (domain.Lin
 	return domain.Link{ID: 1, Code: code, OriginalURL: raw, CreatedAt: time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC)}, r.err
 }
 
-func testHandler(repository *repositoryStub) *Handler {
+func testHandler(repository *repositoryStub, logs ...*slog.Logger) *Handler {
 	log := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	if len(logs) > 0 {
+		log = logs[0]
+	}
 	service := shortener.New(repository, &visitStub{}, missingCache{}, func() (string, error) { return "AbC123z9", nil }, 150*time.Millisecond, log)
-	return NewHandler(service, nil, nil, "https://sho.rt", log)
+	return NewHandler(service, analytics.New(&analyticsStub{}), nil, "https://sho.rt", log)
 }
 
 func TestShortenCreated(t *testing.T) {
@@ -157,8 +163,7 @@ func TestShortenMapsErrorsWithoutLeakingDetails(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var logs bytes.Buffer
-			handler := testHandler(&repositoryStub{err: tc.err})
-			handler.log = slog.New(slog.NewJSONHandler(&logs, nil))
+			handler := testHandler(&repositoryStub{err: tc.err}, slog.New(slog.NewJSONHandler(&logs, nil)))
 			request := httptest.NewRequest(http.MethodPost, "/shorten", strings.NewReader(tc.body))
 			request.Header.Set("Content-Type", "application/json")
 			response := httptest.NewRecorder()

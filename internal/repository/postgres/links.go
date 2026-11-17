@@ -14,14 +14,17 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// LinkRepository stores links and resolves short codes.
 type LinkRepository struct {
 	pool *pgxpool.Pool
 }
 
+// NewLinkRepository creates a PostgreSQL link repository.
 func NewLinkRepository(pool *pgxpool.Pool) *LinkRepository {
 	return &LinkRepository{pool: pool}
 }
 
+// Create atomically stores a link or reports a short code conflict.
 func (r *LinkRepository) Create(ctx context.Context, code, originalURL string) (domain.Link, error) {
 	const query = `INSERT INTO links (code, original_url)
 		VALUES ($1, $2)
@@ -41,6 +44,7 @@ func (r *LinkRepository) Create(ctx context.Context, code, originalURL string) (
 	return link, nil
 }
 
+// FindByCode returns the stored link or a not-found error.
 func (r *LinkRepository) FindByCode(ctx context.Context, code string) (domain.Link, error) {
 	const query = `SELECT id, code, original_url, created_at FROM links WHERE code = $1`
 	var link domain.Link

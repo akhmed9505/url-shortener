@@ -11,8 +11,10 @@ import (
 	"github.com/akhmed9505/url-shortener/internal/domain"
 )
 
+// ValidationError identifies an invalid field and its validation message.
 type ValidationError = domain.ValidationError
 
+// ValidateURL validates an absolute HTTP or HTTPS destination URL.
 func ValidateURL(raw string) error {
 	invalid := &ValidationError{Field: "url", Message: "URL must be an absolute HTTP or HTTPS address without credentials, spaces, control characters or backslashes"}
 	if len(raw) == 0 || len(raw) > 2048 || !utf8.ValidString(raw) {
@@ -45,6 +47,7 @@ func ValidateURL(raw string) error {
 	return nil
 }
 
+// ValidateAlias validates a user-selected short code.
 func ValidateAlias(alias string) error {
 	if !domain.ValidCode(alias) {
 		return &ValidationError{Field: "alias", Message: "Alias must contain 3 to 32 characters from A-Z, a-z, 0-9, underscore and hyphen"}

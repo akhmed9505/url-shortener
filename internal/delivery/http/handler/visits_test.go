@@ -1,4 +1,4 @@
-package http
+package handler_test
 
 import (
 	"context"
@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	. "github.com/akhmed9505/url-shortener/internal/delivery/http/handler"
+	. "github.com/akhmed9505/url-shortener/internal/delivery/http/response"
 	"github.com/akhmed9505/url-shortener/internal/domain"
 	"github.com/akhmed9505/url-shortener/internal/service/analytics"
 )
@@ -50,7 +52,7 @@ func TestVisitsHTTP(t *testing.T) {
 		t.Run(tc.query+tc.errorCode, func(t *testing.T) {
 			stub := &visitsHTTPStub{analyticsStub: analyticsStub{err: tc.err}}
 			handler := testHandler(&repositoryStub{})
-			handler.analytics = analytics.New(stub)
+			handler = NewHandler(nil, analytics.New(stub), nil, "https://sho.rt", testLogger())
 			response := httptest.NewRecorder()
 			NewRouter(handler).ServeHTTP(response, httptest.NewRequest("GET", "/analytics/abc/visits"+tc.query, nil))
 			if response.Code != tc.status || response.Header().Get("Cache-Control") != "no-store" {
@@ -94,7 +96,7 @@ func TestVisitsHTTPItemAndMethod(t *testing.T) {
 		{ID: 1, VisitedAt: at},
 	}}
 	handler := testHandler(&repositoryStub{})
-	handler.analytics = analytics.New(stub)
+	handler = NewHandler(nil, analytics.New(stub), nil, "https://sho.rt", testLogger())
 	router := NewRouter(handler)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest("GET", "/analytics/abc/visits?from=2024-02-29&to=2024-03-01&limit=1", nil))

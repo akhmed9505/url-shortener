@@ -1,4 +1,4 @@
-package http
+package middleware
 
 import (
 	"container/list"
@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/akhmed9505/url-shortener/internal/delivery/http/response"
 	"golang.org/x/time/rate"
 )
 
@@ -17,11 +18,14 @@ const (
 	ipIdleTTL     = 10 * time.Minute
 )
 
-type rateBucket uint8
+// Bucket selects the per-IP creation or shared analytics token bucket.
+type Bucket uint8
 
 const (
-	creationBucket rateBucket = iota
-	analyticsBucket
+	// Creation selects the link creation limit.
+	Creation Bucket = iota
+	// Analytics selects the shared analytics limit.
+	Analytics
 )
 
 type ipLimits struct {
@@ -31,23 +35,26 @@ type ipLimits struct {
 	lastSeen  time.Time
 }
 
-type rateLimits struct {
+// RateLimits maintains concurrency-safe bounded per-IP token buckets.
+type RateLimits struct {
 	mu       sync.Mutex
 	entries  map[netip.Addr]*list.Element
 	activity list.List
 	now      func() time.Time
 }
 
-func newRateLimits(now func() time.Time) *rateLimits {
-	return &rateLimits{entries: make(map[netip.Addr]*list.Element), now: now}
+// NewRateLimits creates process-local rate limits using the supplied clock.
+func NewRateLimits(now func() time.Time) *RateLimits {
+	return &RateLimits{entries: make(map[netip.Addr]*list.Element), now: now}
 }
 
-func (l *rateLimits) middleware(bucket rateBucket) func(http.Handler) http.Handler {
+// Middleware enforces the selected per-IP bucket.
+func (l *RateLimits) Middleware(bucket Bucket) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if retryAfter := l.allow(remoteIP(r.RemoteAddr), bucket); retryAfter > 0 {
 				w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
-				writeError(w, r, http.StatusTooManyRequests, "rate_limit_exceeded", "Rate limit exceeded", "")
+				response.Error(w, RequestID(r), http.StatusTooManyRequests, "rate_limit_exceeded", "Rate limit exceeded", "")
 				return
 			}
 			next.ServeHTTP(w, r)
@@ -56,7 +63,7 @@ func (l *rateLimits) middleware(bucket rateBucket) func(http.Handler) http.Handl
 }
 
 // allow returns zero on admission or a Retry-After value in whole seconds.
-func (l *rateLimits) allow(ip netip.Addr, bucket rateBucket) int {
+func (l *RateLimits) allow(ip netip.Addr, bucket Bucket) int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	now := l.now()
@@ -86,7 +93,7 @@ func (l *rateLimits) allow(ip netip.Addr, bucket rateBucket) int {
 	entry.lastSeen = now
 	l.activity.MoveToBack(element)
 	limiter := entry.creation
-	if bucket == analyticsBucket {
+	if bucket == Analytics {
 		limiter = entry.analytics
 	}
 	if limiter.AllowN(now, 1) {

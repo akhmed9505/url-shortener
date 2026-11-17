@@ -1,3 +1,4 @@
+// Package shortener creates and resolves short links and records visits.
 package shortener
 
 import (
@@ -7,6 +8,7 @@ import (
 
 const alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 
+// GenerateCode returns an eight-character Base62 code generated without distribution bias.
 func GenerateCode() (string, error) {
 	return generateCode(rand.Reader)
 }

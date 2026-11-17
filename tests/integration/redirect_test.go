@@ -16,7 +16,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	httpdelivery "github.com/akhmed9505/url-shortener/internal/delivery/http"
+	httpresponse "github.com/akhmed9505/url-shortener/internal/delivery/http/response"
 	"github.com/akhmed9505/url-shortener/internal/domain"
 	pgrepo "github.com/akhmed9505/url-shortener/internal/repository/postgres"
 	"github.com/akhmed9505/url-shortener/internal/service/shortener"
@@ -91,7 +91,7 @@ func TestRedirectMissingLinkAndHeadDoNotRecordEvents(t *testing.T) {
 	link := createRedirectLink(t, pool)
 	server := newRedirectServer(t, pool, io.Discard)
 	status, _, body := redirectRequest(t, server, http.MethodGet, "missing", "")
-	var response httpdelivery.ErrorResponse
+	var response httpresponse.ErrorResponse
 	if err := json.Unmarshal(body, &response); err != nil {
 		t.Fatal(err)
 	}

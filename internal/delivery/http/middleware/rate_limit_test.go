@@ -1,4 +1,4 @@
-package http
+package middleware
 
 import (
 	"encoding/json"
@@ -12,8 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/akhmed9505/url-shortener/internal/service/analytics"
-	"github.com/akhmed9505/url-shortener/internal/service/shortener"
+	httpresponse "github.com/akhmed9505/url-shortener/internal/delivery/http/response"
 )
 
 type limiterClock struct {
@@ -40,16 +39,16 @@ func (c *limiterClock) Advance(duration time.Duration) {
 func TestRateLimitsBurstAndRefill(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
-		bucket   rateBucket
+		bucket   Bucket
 		burst    int
 		interval time.Duration
 	}{
-		{"creation", creationBucket, 5, 6 * time.Second},
-		{"analytics", analyticsBucket, 10, time.Second},
+		{"creation", Creation, 5, 6 * time.Second},
+		{"analytics", Analytics, 10, time.Second},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			clock := newLimiterClock()
-			limits := newRateLimits(clock.Now)
+			limits := NewRateLimits(clock.Now)
 			ip := netip.MustParseAddr("192.0.2.1")
 			for range tc.burst {
 				if retry := limits.allow(ip, tc.bucket); retry != 0 {
@@ -86,49 +85,49 @@ func TestRateLimitsBurstAndRefill(t *testing.T) {
 }
 
 func TestRateLimitsClientAndBucketIsolation(t *testing.T) {
-	limits := newRateLimits(newLimiterClock().Now)
+	limits := NewRateLimits(newLimiterClock().Now)
 	first, second := netip.MustParseAddr("192.0.2.1"), netip.MustParseAddr("192.0.2.2")
 	for range 5 {
-		if limits.allow(first, creationBucket) != 0 {
+		if limits.allow(first, Creation) != 0 {
 			t.Fatal("creation burst rejected")
 		}
 	}
-	if limits.allow(first, creationBucket) == 0 || limits.allow(second, creationBucket) != 0 {
+	if limits.allow(first, Creation) == 0 || limits.allow(second, Creation) != 0 {
 		t.Fatal("client buckets are not isolated")
 	}
 	for range 10 {
-		if limits.allow(first, analyticsBucket) != 0 {
+		if limits.allow(first, Analytics) != 0 {
 			t.Fatal("creation consumed analytics tokens")
 		}
 	}
-	if limits.allow(first, analyticsBucket) == 0 || limits.allow(second, analyticsBucket) != 0 || len(limits.entries) != 2 {
+	if limits.allow(first, Analytics) == 0 || limits.allow(second, Analytics) != 0 || len(limits.entries) != 2 {
 		t.Fatal("analytics client isolation or shared IP accounting failed")
 	}
 }
 
 func TestRateLimitsIdleCleanup(t *testing.T) {
 	clock := newLimiterClock()
-	limits := newRateLimits(clock.Now)
+	limits := NewRateLimits(clock.Now)
 	first := netip.MustParseAddr("192.0.2.1")
 	second := netip.MustParseAddr("192.0.2.2")
 	third := netip.MustParseAddr("192.0.2.3")
-	limits.allow(first, creationBucket)
+	limits.allow(first, Creation)
 	clock.Advance(time.Minute)
-	limits.allow(second, analyticsBucket)
+	limits.allow(second, Analytics)
 	clock.Advance(time.Minute)
-	limits.allow(first, analyticsBucket)
+	limits.allow(first, Analytics)
 	clock.Advance(9 * time.Minute)
-	limits.allow(third, creationBucket)
+	limits.allow(third, Creation)
 	if limits.entries[second] != nil || limits.entries[first] == nil || len(limits.entries) != 2 || limits.activity.Len() != 2 {
 		t.Fatal("idle cleanup did not respect latest activity across both buckets")
 	}
 	clock.Advance(time.Minute)
-	limits.allow(third, creationBucket)
+	limits.allow(third, Creation)
 	if limits.entries[first] != nil || len(limits.entries) != 1 || limits.activity.Len() != 1 {
 		t.Fatal("entry was not removed at the idle boundary")
 	}
 	for range 5 {
-		if limits.allow(first, creationBucket) != 0 {
+		if limits.allow(first, Creation) != 0 {
 			t.Fatal("expired entry did not receive a fresh bucket")
 		}
 	}
@@ -136,23 +135,23 @@ func TestRateLimitsIdleCleanup(t *testing.T) {
 
 func TestRateLimitsRejectedRequestsRefreshActivity(t *testing.T) {
 	clock := newLimiterClock()
-	limits := newRateLimits(clock.Now)
+	limits := NewRateLimits(clock.Now)
 	ip := netip.MustParseAddr("192.0.2.1")
 	for range 5 {
-		limits.allow(ip, creationBucket)
+		limits.allow(ip, Creation)
 	}
 	clock.Advance(time.Second)
-	if limits.allow(ip, creationBucket) == 0 {
+	if limits.allow(ip, Creation) == 0 {
 		t.Fatal("expected exhausted bucket")
 	}
 	clock.Advance(ipIdleTTL - 500*time.Millisecond)
 	other := netip.MustParseAddr("192.0.2.2")
-	limits.allow(other, creationBucket)
+	limits.allow(other, Creation)
 	if limits.entries[ip] == nil {
 		t.Fatal("rejected request was ignored as activity")
 	}
 	clock.Advance(500 * time.Millisecond)
-	limits.allow(other, creationBucket)
+	limits.allow(other, Creation)
 	if limits.entries[ip] != nil {
 		t.Fatal("expired entry was retained")
 	}
@@ -160,16 +159,16 @@ func TestRateLimitsRejectedRequestsRefreshActivity(t *testing.T) {
 
 func TestRateLimitsCapacity(t *testing.T) {
 	clock := newLimiterClock()
-	limits := newRateLimits(clock.Now)
+	limits := NewRateLimits(clock.Now)
 	for i := range maxTrackedIPs {
 		ip := netip.AddrFrom4([4]byte{10, 0, byte(i >> 8), byte(i)})
-		if limits.allow(ip, creationBucket) != 0 {
+		if limits.allow(ip, Creation) != 0 {
 			t.Fatalf("IP %d rejected before capacity", i)
 		}
 	}
 	unknown := netip.MustParseAddr("192.0.2.1")
 	for range 100 {
-		if retry := limits.allow(unknown, analyticsBucket); retry != 600 {
+		if retry := limits.allow(unknown, Analytics); retry != 600 {
 			t.Fatalf("capacity retry=%d", retry)
 		}
 	}
@@ -178,26 +177,26 @@ func TestRateLimitsCapacity(t *testing.T) {
 	}
 	clock.Advance(time.Minute)
 	existing := netip.MustParseAddr("10.0.0.0")
-	if limits.allow(existing, analyticsBucket) != 0 {
+	if limits.allow(existing, Analytics) != 0 {
 		t.Fatal("existing IP rejected at capacity")
 	}
-	if retry := limits.allow(unknown, analyticsBucket); retry != 540 {
+	if retry := limits.allow(unknown, Analytics); retry != 540 {
 		t.Fatalf("capacity retry did not account for idle time: %d", retry)
 	}
 	clock.Advance(9 * time.Minute)
-	if limits.allow(unknown, analyticsBucket) != 0 || len(limits.entries) != 2 || limits.activity.Len() != 2 || limits.entries[existing] == nil {
+	if limits.allow(unknown, Analytics) != 0 || len(limits.entries) != 2 || limits.activity.Len() != 2 || limits.entries[existing] == nil {
 		t.Fatal("idle capacity was not reclaimed without evicting active IP")
 	}
 }
 
 func TestRateLimitsConcurrentRequests(t *testing.T) {
-	limits := newRateLimits(newLimiterClock().Now)
+	limits := NewRateLimits(newLimiterClock().Now)
 	var creation, analytics atomic.Int64
-	creationHandler := withRequestID(limits.middleware(creationBucket)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	creationHandler := WithRequestID(limits.Middleware(Creation)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		creation.Add(1)
 		w.WriteHeader(http.StatusNoContent)
 	})))
-	analyticsHandler := withRequestID(limits.middleware(analyticsBucket)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	analyticsHandler := WithRequestID(limits.Middleware(Analytics)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		analytics.Add(1)
 		w.WriteHeader(http.StatusNoContent)
 	})))
@@ -224,16 +223,16 @@ func TestRateLimitsConcurrentRequests(t *testing.T) {
 }
 
 func TestRateLimitsConcurrentCapacity(t *testing.T) {
-	limits := newRateLimits(newLimiterClock().Now)
+	limits := NewRateLimits(newLimiterClock().Now)
 	for i := range maxTrackedIPs - 2 {
-		limits.allow(netip.AddrFrom4([4]byte{10, 0, byte(i >> 8), byte(i)}), creationBucket)
+		limits.allow(netip.AddrFrom4([4]byte{10, 0, byte(i >> 8), byte(i)}), Creation)
 	}
 	var admitted atomic.Int64
 	var workers sync.WaitGroup
 	for i := range 128 {
 		workers.Go(func() {
 			ip := netip.AddrFrom4([4]byte{192, 0, 2, byte(i)})
-			if limits.allow(ip, analyticsBucket) == 0 {
+			if limits.allow(ip, Analytics) == 0 {
 				admitted.Add(1)
 			}
 		})
@@ -253,45 +252,9 @@ func rateLimitRequest(router http.Handler, method, path, remoteAddr string) *htt
 	return response
 }
 
-func TestRateLimitRoutesAndSharedAnalytics(t *testing.T) {
-	clock := newLimiterClock()
-	limits := newRateLimits(clock.Now)
-	handler := testHandler(&repositoryStub{})
-	handler.analytics = analytics.New(&analyticsStub{})
-	router := newRouter(handler, limits)
-	remote := "192.0.2.1:1234"
-	for range 5 {
-		if response := rateLimitRequest(router, "POST", "/shorten", remote); response.Code != 400 {
-			t.Fatalf("creation burst status=%d", response.Code)
-		}
-	}
-	response := rateLimitRequest(router, "POST", "/shorten", remote)
-	assertRateLimitResponse(t, response, "6")
-	for i := range 10 {
-		path := "/analytics/abc"
-		if i%2 == 0 {
-			path += "/visits"
-		}
-		if response := rateLimitRequest(router, "GET", path, remote); response.Code != 200 {
-			t.Fatalf("analytics burst status=%d body=%s", response.Code, response.Body)
-		}
-	}
-	assertRateLimitResponse(t, rateLimitRequest(router, "GET", "/analytics/abc", remote), "1")
-	assertRateLimitResponse(t, rateLimitRequest(router, "GET", "/analytics/other/visits", remote), "1")
-	clock.Advance(time.Second)
-	if response := rateLimitRequest(router, "GET", "/analytics/abc/visits", remote); response.Code != 200 {
-		t.Fatalf("refilled analytics status=%d", response.Code)
-	}
-	assertRateLimitResponse(t, rateLimitRequest(router, "GET", "/analytics/abc", remote), "1")
-	assertRateLimitResponse(t, rateLimitRequest(router, "POST", "/shorten", remote), "5")
-	if response := rateLimitRequest(router, "GET", "/analytics/abc", "192.0.2.2:1234"); response.Code != 200 {
-		t.Fatalf("separate IP status=%d", response.Code)
-	}
-}
-
 func assertRateLimitResponse(t *testing.T, response *httptest.ResponseRecorder, retry string) {
 	t.Helper()
-	var body ErrorResponse
+	var body httpresponse.ErrorResponse
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
@@ -301,9 +264,9 @@ func assertRateLimitResponse(t *testing.T, response *httptest.ResponseRecorder, 
 }
 
 func TestRateLimitsIgnoreForwardedHeadersAndPorts(t *testing.T) {
-	limits := newRateLimits(newLimiterClock().Now)
+	limits := NewRateLimits(newLimiterClock().Now)
 	var called int
-	router := withRequestID(limits.middleware(creationBucket)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	router := WithRequestID(limits.Middleware(Creation)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		called++
 		w.WriteHeader(http.StatusNoContent)
 	})))
@@ -330,30 +293,6 @@ func TestRateLimitsIgnoreForwardedHeadersAndPorts(t *testing.T) {
 	}
 }
 
-func TestRateLimitsBypassRedirectsAndHealthAtCapacity(t *testing.T) {
-	limits := newRateLimits(newLimiterClock().Now)
-	for i := range maxTrackedIPs {
-		limits.allow(netip.AddrFrom4([4]byte{10, 0, byte(i >> 8), byte(i)}), creationBucket)
-	}
-	visits := &visitStub{}
-	handler := testHandler(&repositoryStub{})
-	handler.shortener = shortener.New(&repositoryStub{}, visits, missingCache{}, shortener.GenerateCode, 150*time.Millisecond, handler.log)
-	router := newRouter(handler, limits)
-	for range 100 {
-		if response := rateLimitRequest(router, "GET", "/s/abc", "192.0.2.1:1234"); response.Code != 302 {
-			t.Fatalf("redirect status=%d body=%s", response.Code, response.Body)
-		}
-		if response := rateLimitRequest(router, "GET", "/health/live", "192.0.2.1:1234"); response.Code != 200 {
-			t.Fatalf("health status=%d", response.Code)
-		}
-	}
-	if len(visits.visits) != 100 || len(limits.entries) != maxTrackedIPs {
-		t.Fatalf("visits=%d tracked IPs=%d", len(visits.visits), len(limits.entries))
-	}
-	assertRateLimitResponse(t, rateLimitRequest(router, "POST", "/shorten", "192.0.2.1:1234"), "600")
-	assertRateLimitResponse(t, rateLimitRequest(router, "GET", "/analytics/abc", "192.0.2.1:1234"), "600")
-}
-
 func TestRemoteIP(t *testing.T) {
 	for _, tc := range []struct{ remote, want string }{
 		{"192.0.2.1:1234", "192.0.2.1"}, {"192.0.2.1", "192.0.2.1"},
@@ -376,13 +315,13 @@ func TestRateLimitRetryAfterRounding(t *testing.T) {
 	} {
 		t.Run(tc.elapsed.String(), func(t *testing.T) {
 			clock := newLimiterClock()
-			limits := newRateLimits(clock.Now)
+			limits := NewRateLimits(clock.Now)
 			ip := netip.MustParseAddr("192.0.2.1")
 			for range 5 {
-				limits.allow(ip, creationBucket)
+				limits.allow(ip, Creation)
 			}
 			clock.Advance(tc.elapsed)
-			handler := withRequestID(limits.middleware(creationBucket)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { t.Error("request admitted before refill") })))
+			handler := WithRequestID(limits.Middleware(Creation)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { t.Error("request admitted before refill") })))
 			assertRateLimitResponse(t, rateLimitRequest(handler, "POST", "/shorten", "192.0.2.1:9999"), tc.want)
 		})
 	}

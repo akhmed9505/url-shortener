@@ -7,15 +7,13 @@ import (
 	"github.com/akhmed9505/url-shortener/internal/domain"
 )
 
-type Repository interface {
-	Summary(context.Context, string, domain.AnalyticsPeriod) (domain.Analytics, error)
-	ListVisits(context.Context, string, domain.AnalyticsPeriod, *domain.VisitPosition, int) ([]domain.Visit, error)
-}
-
+// Service validates analytics queries and reads stored visits.
 type Service struct{ repository Repository }
 
+// New creates an analytics service with the supplied repository.
 func New(repository Repository) *Service { return &Service{repository: repository} }
 
+// Summary returns consistent aggregate visit counts for the selected period.
 func (s *Service) Summary(ctx context.Context, code, from, to string, now time.Time) (domain.Analytics, error) {
 	if err := ctx.Err(); err != nil {
 		return domain.Analytics{}, err
@@ -45,4 +43,57 @@ func parsePeriod(from, to string, now time.Time) (domain.AnalyticsPeriod, error)
 		return domain.AnalyticsPeriod{}, invalid
 	}
 	return domain.AnalyticsPeriod{From: start, To: end}, nil
+}
+
+// VisitPage holds a period, ordered visits and an optional continuation cursor.
+type VisitPage struct {
+	Code       string
+	Period     domain.AnalyticsPeriod
+	Items      []domain.Visit
+	NextCursor *string
+}
+
+// Visits validates the period and cursor and returns a page of visits.
+func (s *Service) Visits(ctx context.Context, code, from, to string, limit int, cursor string, now time.Time) (VisitPage, error) {
+	if err := ctx.Err(); err != nil {
+		return VisitPage{}, err
+	}
+	if !domain.ValidCode(code) {
+		return VisitPage{}, &domain.ValidationError{Field: "code", Message: "Invalid short code"}
+	}
+	if limit == 0 {
+		limit = 20
+	}
+	if limit < 1 || limit > 100 {
+		return VisitPage{}, &domain.ValidationError{Field: "limit", Message: "limit must be between 1 and 100"}
+	}
+	if cursor != "" && (from == "" || to == "") {
+		return VisitPage{}, errInvalidCursor
+	}
+	period, err := parsePeriod(from, to, now)
+	if err != nil {
+		return VisitPage{}, err
+	}
+	var after *domain.VisitPosition
+	if cursor != "" {
+		position, err := decodeCursor(cursor, code, period)
+		if err != nil {
+			return VisitPage{}, err
+		}
+		after = &position
+	}
+	items, err := s.repository.ListVisits(ctx, code, period, after, limit+1)
+	if err != nil {
+		return VisitPage{}, err
+	}
+	page := VisitPage{Code: code, Period: period, Items: items}
+	if len(items) > limit {
+		page.Items = items[:limit]
+		next, err := encodeCursor(code, period, page.Items[limit-1])
+		if err != nil {
+			return VisitPage{}, err
+		}
+		page.NextCursor = &next
+	}
+	return page, nil
 }

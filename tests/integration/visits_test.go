@@ -15,6 +15,9 @@ import (
 	"time"
 
 	httpdelivery "github.com/akhmed9505/url-shortener/internal/delivery/http"
+	httphandler "github.com/akhmed9505/url-shortener/internal/delivery/http/handler"
+	"github.com/akhmed9505/url-shortener/internal/delivery/http/middleware"
+	httpresponse "github.com/akhmed9505/url-shortener/internal/delivery/http/response"
 	"github.com/akhmed9505/url-shortener/internal/domain"
 	pgrepo "github.com/akhmed9505/url-shortener/internal/repository/postgres"
 	"github.com/akhmed9505/url-shortener/internal/service/analytics"
@@ -24,21 +27,21 @@ import (
 func visitsServer(t *testing.T, pool *pgxpool.Pool) *httptest.Server {
 	t.Helper()
 	log := slog.New(slog.NewJSONHandler(io.Discard, nil))
-	handler := httpdelivery.NewHandler(nil, analytics.New(pgrepo.NewAnalyticsRepository(pool)), pool.Ping, "https://sho.rt", log)
-	server := httptest.NewServer(httpdelivery.NewRouter(handler))
+	handler := httphandler.NewHandler(nil, analytics.New(pgrepo.NewAnalyticsRepository(pool)), pool.Ping, "https://sho.rt", log)
+	server := httptest.NewServer(httpdelivery.NewRouter(handler, log, middleware.NewRateLimits(time.Now)))
 	server.Client().Timeout = 5 * time.Second
 	t.Cleanup(server.Close)
 	return server
 }
 
-func fetchVisits(t *testing.T, server *httptest.Server, code string, query url.Values) httpdelivery.VisitsResponse {
+func fetchVisits(t *testing.T, server *httptest.Server, code string, query url.Values) httphandler.VisitsResponse {
 	t.Helper()
 	response, err := server.Client().Get(server.URL + "/analytics/" + code + "/visits?" + query.Encode())
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer response.Body.Close()
-	var page httpdelivery.VisitsResponse
+	var page httphandler.VisitsResponse
 	if response.StatusCode != 200 {
 		body, _ := io.ReadAll(response.Body)
 		t.Fatalf("status=%d body=%s", response.StatusCode, body)
@@ -165,7 +168,7 @@ func assertVisitsError(t *testing.T, server *httptest.Server, code string, query
 		t.Fatal(err)
 	}
 	defer response.Body.Close()
-	var body httpdelivery.ErrorResponse
+	var body httpresponse.ErrorResponse
 	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
 		t.Fatal(err)
 	}

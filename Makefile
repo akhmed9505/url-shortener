@@ -5,6 +5,7 @@ GOOSE_TAGS := no_clickhouse,no_libsql,no_mssql,no_mysql,no_sqlite3,no_vertica,no
 LOAD_ENV = set -e; set -a; if [ -f .env ]; then . ./.env; fi; set +a;
 GOOSE = GOOSE_DRIVER=postgres GOOSE_DBSTRING="$${POSTGRES_DSN:-postgres://shortener:shortener@localhost:5432/shortener?sslmode=disable}" go run -tags='$(GOOSE_TAGS)' github.com/pressly/goose/v3/cmd/goose@$(GOOSE_VERSION) -env=none -dir migrations -timeout 30s
 
+# Local execution and builds.
 run:
 	@$(LOAD_ENV) exec go run ./cmd/shortener
 
@@ -14,6 +15,7 @@ build:
 build-goose:
 	GOBIN="$(CURDIR)/bin" go install -tags='$(GOOSE_TAGS)' github.com/pressly/goose/v3/cmd/goose@$(GOOSE_VERSION)
 
+# Unit tests and local checks.
 test:
 	go test ./...
 
@@ -35,18 +37,21 @@ tidy:
 
 check: fmt-check test race vet build
 
+# Local dependency containers.
 postgres-up:
 	docker compose -f docker-compose.yml up -d --wait postgres
 
 postgres-down:
 	docker compose -f docker-compose.yml stop postgres
 
+# Isolated PostgreSQL test instance.
 postgres-test-up:
 	POSTGRES_PORT=55432 docker compose -f docker-compose.yml -p shortener-test up -d --wait postgres
 
 postgres-test-down:
 	POSTGRES_PORT=55432 docker compose -f docker-compose.yml -p shortener-test stop postgres
 
+# Local Redis containers.
 redis-up:
 	docker compose -f docker-compose.yml up -d --wait redis
 
@@ -59,6 +64,7 @@ redis-test-up:
 redis-test-down:
 	REDIS_PORT=56379 docker compose -f docker-compose.yml -p shortener-test stop redis
 
+# Combined dependency lifecycle.
 deps-up:
 	docker compose -f docker-compose.yml up -d --wait postgres redis
 
@@ -71,6 +77,7 @@ test-deps-up:
 test-deps-down:
 	POSTGRES_PORT=55432 REDIS_PORT=56379 docker compose -f docker-compose.yml -p shortener-test down
 
+# Goose migration commands.
 migrate-up:
 	@$(LOAD_ENV) $(GOOSE) up
 

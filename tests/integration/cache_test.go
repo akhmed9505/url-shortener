@@ -18,6 +18,8 @@ import (
 
 	"github.com/akhmed9505/url-shortener/internal/config"
 	httpdelivery "github.com/akhmed9505/url-shortener/internal/delivery/http"
+	httphandler "github.com/akhmed9505/url-shortener/internal/delivery/http/handler"
+	"github.com/akhmed9505/url-shortener/internal/delivery/http/middleware"
 	"github.com/akhmed9505/url-shortener/internal/domain"
 	redisinfra "github.com/akhmed9505/url-shortener/internal/infra/redis"
 	pgrepo "github.com/akhmed9505/url-shortener/internal/repository/postgres"
@@ -70,7 +72,7 @@ func cachedServer(t *testing.T, pool *pgxpool.Pool, cache shortener.LinkCache, l
 	t.Helper()
 	log := slog.New(slog.NewJSONHandler(logs, nil))
 	service := shortener.New(pgrepo.NewLinkRepository(pool), pgrepo.NewVisitRepository(pool), cache, shortener.GenerateCode, 150*time.Millisecond, log)
-	server := httptest.NewServer(httpdelivery.NewRouter(httpdelivery.NewHandler(service, nil, pool.Ping, "https://sho.rt", log)))
+	server := httptest.NewServer(httpdelivery.NewRouter(httphandler.NewHandler(service, nil, pool.Ping, "https://sho.rt", log), log, middleware.NewRateLimits(time.Now)))
 	t.Cleanup(server.Close)
 	server.Client().CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	server.Client().Timeout = 5 * time.Second

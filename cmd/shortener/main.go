@@ -1,3 +1,4 @@
+// Shortener serves short links and public visit analytics.
 package main
 
 import (

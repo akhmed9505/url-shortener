@@ -15,6 +15,9 @@ import (
 
 	"github.com/akhmed9505/url-shortener/internal/config"
 	httpdelivery "github.com/akhmed9505/url-shortener/internal/delivery/http"
+	httphandler "github.com/akhmed9505/url-shortener/internal/delivery/http/handler"
+	"github.com/akhmed9505/url-shortener/internal/delivery/http/middleware"
+	httpresponse "github.com/akhmed9505/url-shortener/internal/delivery/http/response"
 	pginfra "github.com/akhmed9505/url-shortener/internal/infra/postgres"
 	"github.com/akhmed9505/url-shortener/migrations"
 	"github.com/jackc/pgx/v5"
@@ -24,7 +27,7 @@ import (
 func TestReadinessPostgresAvailabilityAndRecovery(t *testing.T) {
 	pool, _ := newDatabase(t, true)
 	log := slog.New(slog.NewJSONHandler(io.Discard, nil))
-	server := httptest.NewServer(httpdelivery.NewRouter(httpdelivery.NewHandler(nil, nil, func(ctx context.Context) error { return pginfra.CheckReadiness(ctx, pool) }, "https://sho.rt", log)))
+	server := httptest.NewServer(httpdelivery.NewRouter(httphandler.NewHandler(nil, nil, func(ctx context.Context) error { return pginfra.CheckReadiness(ctx, pool) }, "https://sho.rt", log), log, middleware.NewRateLimits(time.Now)))
 	defer server.Close()
 	checkHealthStatus(t, server.URL, "/health/ready", 200)
 	admin, err := pgx.Connect(t.Context(), os.Getenv("TEST_POSTGRES_DSN"))
@@ -65,7 +68,7 @@ func TestReadinessPoolWaitIsBounded(t *testing.T) {
 	}
 	defer conn.Release()
 	log := slog.New(slog.NewJSONHandler(io.Discard, nil))
-	server := httptest.NewServer(httpdelivery.NewRouter(httpdelivery.NewHandler(nil, nil, func(ctx context.Context) error { return pginfra.CheckReadiness(ctx, limited) }, "https://sho.rt", log)))
+	server := httptest.NewServer(httpdelivery.NewRouter(httphandler.NewHandler(nil, nil, func(ctx context.Context) error { return pginfra.CheckReadiness(ctx, limited) }, "https://sho.rt", log), log, middleware.NewRateLimits(time.Now)))
 	defer server.Close()
 	started := time.Now()
 	checkHealthStatus(t, server.URL, "/health/ready", 503)
@@ -89,7 +92,7 @@ func checkHealthStatus(t *testing.T, base, path string, status int) {
 		t.Fatalf("%s status=%d body=%s", path, response.StatusCode, body)
 	}
 	if status == 503 {
-		var body httpdelivery.ErrorResponse
+		var body httpresponse.ErrorResponse
 		if err := json.NewDecoder(response.Body).Decode(&body); err != nil || body.Error.Code != "not_ready" {
 			t.Fatalf("body=%+v err=%v", body, err)
 		}
@@ -133,7 +136,7 @@ func TestReadinessRejectsMigrationHistoryMismatch(t *testing.T) {
 	pool, _ := newDatabase(t, true)
 	log := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	check := func(ctx context.Context) error { return pginfra.CheckReadiness(ctx, pool) }
-	server := httptest.NewServer(httpdelivery.NewRouter(httpdelivery.NewHandler(nil, nil, check, "https://sho.rt", log)))
+	server := httptest.NewServer(httpdelivery.NewRouter(httphandler.NewHandler(nil, nil, check, "https://sho.rt", log), log, middleware.NewRateLimits(time.Now)))
 	defer server.Close()
 	versions, err := migrations.Versions()
 	if err != nil {
@@ -185,7 +188,7 @@ func TestReadinessSchemaQueryDeadline(t *testing.T) {
 	}
 	log := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	check := func(ctx context.Context) error { return pginfra.CheckReadiness(ctx, pool) }
-	server := httptest.NewServer(httpdelivery.NewRouter(httpdelivery.NewHandler(nil, nil, check, "https://sho.rt", log)))
+	server := httptest.NewServer(httpdelivery.NewRouter(httphandler.NewHandler(nil, nil, check, "https://sho.rt", log), log, middleware.NewRateLimits(time.Now)))
 	defer server.Close()
 	started := time.Now()
 	checkHealthStatus(t, server.URL, "/health/ready", 503)
@@ -205,7 +208,7 @@ func TestReadinessRejectsMissingApplicationTables(t *testing.T) {
 			pool, _ := newDatabase(t, true)
 			log := slog.New(slog.NewJSONHandler(io.Discard, nil))
 			check := func(ctx context.Context) error { return pginfra.CheckReadiness(ctx, pool) }
-			server := httptest.NewServer(httpdelivery.NewRouter(httpdelivery.NewHandler(nil, nil, check, "https://sho.rt", log)))
+			server := httptest.NewServer(httpdelivery.NewRouter(httphandler.NewHandler(nil, nil, check, "https://sho.rt", log), log, middleware.NewRateLimits(time.Now)))
 			defer server.Close()
 			checkHealthStatus(t, server.URL, "/health/ready", 200)
 			if _, err := pool.Exec(t.Context(), "DROP TABLE "+pgx.Identifier{table}.Sanitize()+" CASCADE"); err != nil {

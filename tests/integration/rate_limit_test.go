@@ -15,6 +15,9 @@ import (
 	"time"
 
 	httpdelivery "github.com/akhmed9505/url-shortener/internal/delivery/http"
+	httphandler "github.com/akhmed9505/url-shortener/internal/delivery/http/handler"
+	"github.com/akhmed9505/url-shortener/internal/delivery/http/middleware"
+	httpresponse "github.com/akhmed9505/url-shortener/internal/delivery/http/response"
 	pgrepo "github.com/akhmed9505/url-shortener/internal/repository/postgres"
 	rediscache "github.com/akhmed9505/url-shortener/internal/repository/redis"
 	"github.com/akhmed9505/url-shortener/internal/service/analytics"
@@ -37,8 +40,8 @@ func TestPublicAPIRateLimits(t *testing.T) {
 	pool, redis, link := cacheFixture(t)
 	log := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	service := shortener.New(pgrepo.NewLinkRepository(pool), pgrepo.NewVisitRepository(pool), rediscache.NewLinkCache(redis, time.Hour), shortener.GenerateCode, 150*time.Millisecond, log)
-	handler := httpdelivery.NewHandler(service, analytics.New(pgrepo.NewAnalyticsRepository(pool)), pool.Ping, "https://sho.rt", log)
-	server := httptest.NewServer(httpdelivery.NewRouter(handler))
+	handler := httphandler.NewHandler(service, analytics.New(pgrepo.NewAnalyticsRepository(pool)), pool.Ping, "https://sho.rt", log)
+	server := httptest.NewServer(httpdelivery.NewRouter(handler, log, middleware.NewRateLimits(time.Now)))
 	t.Cleanup(server.Close)
 	client := clientFromIP(t, net.IPv4(127, 0, 0, 1))
 	request := func(method, path, body string) (int, http.Header, []byte) {
@@ -65,7 +68,7 @@ func TestPublicAPIRateLimits(t *testing.T) {
 		t.Helper()
 		status, headers, data := request(method, path, `{"url":"https://example.org"}`)
 		retry, err := strconv.Atoi(headers.Get("Retry-After"))
-		var body httpdelivery.ErrorResponse
+		var body httpresponse.ErrorResponse
 		if err := json.Unmarshal(data, &body); err != nil {
 			t.Fatal(err)
 		}
@@ -111,7 +114,7 @@ func TestPublicAPIRateLimits(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer response.Body.Close()
-	var summary httpdelivery.AnalyticsResponse
+	var summary httphandler.AnalyticsResponse
 	if err := json.NewDecoder(response.Body).Decode(&summary); err != nil {
 		t.Fatal(err)
 	}

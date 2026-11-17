@@ -1,4 +1,5 @@
-package http
+// Package middleware provides request IDs, logging and rate limiting.
+package middleware
 
 import (
 	"log/slog"
@@ -9,7 +10,8 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 )
 
-func withAccessLog(log *slog.Logger) func(http.Handler) http.Handler {
+// WithAccessLog logs request metadata without visitor or destination data.
+func WithAccessLog(log *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			started := time.Now()
@@ -28,7 +30,7 @@ func withAccessLog(log *slog.Logger) func(http.Handler) http.Handler {
 					pattern = route.RoutePattern()
 				}
 				log.InfoContext(r.Context(), "http_request",
-					"request_id", requestID(r), "method", r.Method, "route_pattern", pattern,
+					"request_id", RequestID(r), "method", r.Method, "route_pattern", pattern,
 					"status", status, "duration", time.Since(started))
 			}()
 			next.ServeHTTP(writer, r)

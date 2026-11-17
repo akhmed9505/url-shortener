@@ -1,4 +1,4 @@
-package http
+package handler_test
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	. "github.com/akhmed9505/url-shortener/internal/delivery/http/handler"
 	"github.com/akhmed9505/url-shortener/internal/domain"
 	"github.com/akhmed9505/url-shortener/internal/service/shortener"
 )

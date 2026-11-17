@@ -1,4 +1,4 @@
-package http
+package handler_test
 
 import (
 	"context"
@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	. "github.com/akhmed9505/url-shortener/internal/delivery/http/handler"
 )
 
 func TestReadiness(t *testing.T) {
@@ -21,9 +23,8 @@ func TestReadiness(t *testing.T) {
 		{"timeout", context.DeadlineExceeded, 503},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			handler := testHandler(&repositoryStub{})
 			calls := 0
-			handler.ready = func(ctx context.Context) error {
+			ready := func(ctx context.Context) error {
 				calls++
 				deadline, ok := ctx.Deadline()
 				if !ok || time.Until(deadline) <= 0 || time.Until(deadline) > time.Second {
@@ -32,7 +33,7 @@ func TestReadiness(t *testing.T) {
 				return tc.err
 			}
 			response := httptest.NewRecorder()
-			NewRouter(handler).ServeHTTP(response, httptest.NewRequest("GET", "/health/ready", nil))
+			NewRouter(NewHandler(nil, nil, ready, "https://sho.rt", testLogger())).ServeHTTP(response, httptest.NewRequest("GET", "/health/ready", nil))
 			if response.Code != tc.status || calls != 1 || response.Header().Get("Cache-Control") != "no-store" {
 				t.Fatalf("status=%d calls=%d headers=%v", response.Code, calls, response.Header())
 			}
@@ -52,8 +53,7 @@ func TestReadiness(t *testing.T) {
 }
 
 func TestReadinessHonorsParentDeadline(t *testing.T) {
-	handler := testHandler(&repositoryStub{})
-	handler.ready = func(ctx context.Context) error {
+	ready := func(ctx context.Context) error {
 		<-ctx.Done()
 		return ctx.Err()
 	}
@@ -61,17 +61,16 @@ func TestReadinessHonorsParentDeadline(t *testing.T) {
 	defer cancel()
 	request := httptest.NewRequest("GET", "/health/ready", nil).WithContext(ctx)
 	response := httptest.NewRecorder()
-	NewRouter(handler).ServeHTTP(response, request)
+	NewRouter(NewHandler(nil, nil, ready, "https://sho.rt", testLogger())).ServeHTTP(response, request)
 	assertAPIError(t, response, 503, "not_ready")
 }
 
 func TestLivenessAndUnsupportedMethodsSkipReadiness(t *testing.T) {
-	handler := testHandler(&repositoryStub{})
-	handler.ready = func(context.Context) error {
+	ready := func(context.Context) error {
 		t.Error("unexpected readiness call")
 		return errors.New("unavailable")
 	}
-	router := NewRouter(handler)
+	router := NewRouter(NewHandler(nil, nil, ready, "https://sho.rt", testLogger()))
 	for _, tc := range []struct {
 		method, path string
 		status       int
