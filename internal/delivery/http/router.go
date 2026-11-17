@@ -14,6 +14,9 @@ func NewRouter(handler *Handler) http.Handler {
 func newRouter(handler *Handler, limits *rateLimits) http.Handler {
 	router := chi.NewRouter()
 	router.Use(withRequestID, withAccessLog(handler.log))
+	router.Get("/", serveStatic("index.html", "text/html; charset=utf-8"))
+	router.Get("/assets/app.css", serveStatic("assets/app.css", "text/css; charset=utf-8"))
+	router.Get("/assets/app.js", serveStatic("assets/app.js", "text/javascript; charset=utf-8"))
 	router.With(limits.middleware(creationBucket)).Post("/shorten", handler.Shorten)
 	router.With(limits.middleware(analyticsBucket)).Get("/analytics/{code}", handler.Analytics)
 	router.With(limits.middleware(analyticsBucket)).Get("/analytics/{code}/visits", handler.Visits)

@@ -21,10 +21,10 @@ vet:
 	go vet ./...
 
 fmt:
-	gofmt -w cmd internal migrations tests
+	gofmt -w cmd internal migrations tests web
 
 fmt-check:
-	@files="$$(gofmt -l cmd internal migrations tests)" || exit $$?; \
+	@files="$$(gofmt -l cmd internal migrations tests web)" || exit $$?; \
 	if [ -n "$$files" ]; then printf '%s\n' "$$files"; exit 1; fi
 
 tidy:

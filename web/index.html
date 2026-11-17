@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="ru">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <title>Сокращение ссылок и аналитика</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="/assets/app.css">
+    <script src="/assets/app.js" defer></script>
+</head>
+
+<body>
+    <main>
+        <h1>Shortener</h1>
+        <section aria-labelledby="create-title">
+            <h2 id="create-title">Сокращение ссылок</h2>
+            <form id="create-form" method="post">
+                <label for="url">Исходный URL</label>
+                <input id="url" name="url" type="url" placeholder="https://example.com" required autocomplete="url">
+                <label for="alias">Свой код ссылки (необязательно)</label>
+                <input id="alias" name="alias" minlength="3" maxlength="32" pattern="[A-Za-z0-9_\-]{3,32}"
+                    autocomplete="off" aria-describedby="alias-hint">
+                <p id="alias-hint" class="hint">От 3 до 32 символов — латинские буквы, цифры, подчёркивание и дефис.</p>
+                <button id="create-button" type="submit">Сократить ссылку</button>
+            </form>
+            <p id="create-message" class="message" role="status" aria-live="polite"></p>
+            <div id="create-result" hidden>
+                <p>Короткая ссылка — <a id="short-link" target="_blank" rel="noopener noreferrer"></a></p>
+                <button id="copy-button" type="button">Копировать</button>
+                <button id="view-button" type="button">Посмотреть аналитику</button>
+            </div>
+        </section>
+
+        <section aria-labelledby="analytics-title">
+            <h2 id="analytics-title">Аналитика</h2>
+            <p id="analytics-empty">Введите код ссылки и выберите период.</p>
+            <form id="analytics-form">
+                <label for="code">Код ссылки</label>
+                <input id="code" name="code" required minlength="3" maxlength="32" pattern="[A-Za-z0-9_\-]{3,32}"
+                    autocomplete="off">
+                <label for="from">Начало периода</label>
+                <input id="from" name="from" type="date" required>
+                <label for="to">Конец периода (не включается)</label>
+                <input id="to" name="to" type="date" required>
+                <p class="hint">Период от 1 до 366 дней. Все даты и время указаны в UTC.</p>
+                <button id="analytics-button" type="submit">Показать аналитику</button>
+            </form>
+            <p id="analytics-message" class="message" role="status" aria-live="polite"></p>
+            <div id="analytics-result" hidden>
+                <p>Код — <span id="summary-code"></span></p>
+                <p>Исходный URL — <span id="summary-url"></span></p>
+                <p id="summary-period"></p>
+                <div class="table-wrap">
+                    <table>
+                        <caption>Количество переходов</caption>
+                        <thead>
+                            <tr>
+                                <th scope="col">За всё время</th>
+                                <th scope="col">За выбранный период</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td id="total-visits">0</td>
+                                <td id="period-visits">0</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <caption>По дням</caption>
+                        <thead>
+                            <tr>
+                                <th scope="col">Дата</th>
+                                <th scope="col">Переходы</th>
+                            </tr>
+                        </thead>
+                        <tbody id="daily"></tbody>
+                    </table>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <caption>По месяцам</caption>
+                        <thead>
+                            <tr>
+                                <th scope="col">Месяц</th>
+                                <th scope="col">Переходы</th>
+                            </tr>
+                        </thead>
+                        <tbody id="monthly"></tbody>
+                    </table>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <caption>По агентам пользователя (User-Agent), 20 самых частых</caption>
+                        <thead>
+                            <tr>
+                                <th scope="col">Агент пользователя</th>
+                                <th scope="col">Переходы</th>
+                            </tr>
+                        </thead>
+                        <tbody id="user-agents"></tbody>
+                    </table>
+                </div>
+                <p>Переходы с остальными агентами пользователя — <span id="other-agents">0</span>.</p>
+                <div class="table-wrap">
+                    <table>
+                        <caption>История переходов, от новых к старым</caption>
+                        <thead>
+                            <tr>
+                                <th scope="col">Идентификатор</th>
+                                <th scope="col">Время (UTC)</th>
+                                <th scope="col">Агент пользователя</th>
+                            </tr>
+                        </thead>
+                        <tbody id="visits"></tbody>
+                    </table>
+                </div>
+                <p id="visits-message" class="message" role="status" aria-live="polite"></p>
+                <button id="more-button" type="button" hidden>Загрузить ещё</button>
+            </div>
+        </section>
+        <footer>
+            <p class="hint">Аналитика доступна всем, кто знает код ссылки. IP посетителей не сохраняются.
+                Агент пользователя сохраняется в пределах 1024 байт и может содержать идентифицирующие сведения.
+                Статистика учитывает только сохранённые переходы и может быть неполной.</p>
+        </footer>
+    </main>
+    <noscript>
+        <p>Для создания ссылок и просмотра аналитики включите JavaScript.</p>
+    </noscript>
+</body>
+
+</html>
